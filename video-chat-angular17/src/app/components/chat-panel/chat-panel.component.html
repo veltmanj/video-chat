@@ -1,0 +1,24 @@
+<section class="chat-panel">
+  <header>
+    <h3>Live Chat</h3>
+    <span [class.state-online]="connected">{{ connected ? 'Online' : 'Offline' }}</span>
+  </header>
+
+  <div class="messages">
+    <article class="message" *ngFor="let message of messages" [class.message-local]="message.local">
+      <p class="meta">{{ message.senderName }} • {{ message.sentAt | date:'HH:mm:ss' }}</p>
+      <p class="text">{{ message.text }}</p>
+    </article>
+  </div>
+
+  <form (ngSubmit)="submitMessage()" class="composer">
+    <input
+      type="text"
+      name="message"
+      [(ngModel)]="draft"
+      placeholder="Typ een bericht voor de room"
+      [disabled]="!connected"
+      maxlength="220">
+    <button type="submit" [disabled]="!connected || !draft.trim()">Send</button>
+  </form>
+</section>

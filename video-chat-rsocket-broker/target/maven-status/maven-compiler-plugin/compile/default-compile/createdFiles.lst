@@ -1,0 +1,9 @@
+com/example/videobroker/service/RoomBrokerService.class
+com/example/videobroker/config/BackofficeRoutingProperties$BackofficeEndpoint.class
+com/example/videobroker/VideoChatBrokerApplication.class
+com/example/videobroker/model/RoomPublishRequest.class
+com/example/videobroker/model/RoomEventMessage.class
+com/example/videobroker/model/RoomStreamRequest.class
+com/example/videobroker/config/BackofficeRoutingProperties.class
+com/example/videobroker/service/BackofficeForwardingService.class
+com/example/videobroker/controller/RoomEventController.class

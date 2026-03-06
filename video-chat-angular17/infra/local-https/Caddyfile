@@ -1,0 +1,26 @@
+{
+  auto_https off
+}
+
+:8443 {
+  tls /certs/videochat-lan.pem /certs/videochat-lan-key.pem
+
+  # Frontend -> broker RSocket websocket endpoint (wss://host:8443/rsocket)
+  @broker_rsocket path /rsocket*
+  reverse_proxy @broker_rsocket 127.0.0.1:9898
+
+  # Optional: expose backoffice REST via the same HTTPS origin.
+  handle_path /backoffice-api/* {
+    reverse_proxy 127.0.0.1:7901
+  }
+
+  # Optional: expose backoffice RSocket websocket via wss://host:8443/backoffice-rsocket
+  @backoffice_rsocket path /backoffice-rsocket*
+  handle @backoffice_rsocket {
+    rewrite * /rsocket
+    reverse_proxy 127.0.0.1:7901
+  }
+
+  # Default: Angular dev server.
+  reverse_proxy 127.0.0.1:4200
+}

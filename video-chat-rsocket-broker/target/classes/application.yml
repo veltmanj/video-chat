@@ -1,0 +1,25 @@
+server:
+  address: 0.0.0.0
+  port: 9898
+
+spring:
+  application:
+    name: video-chat-rsocket-broker
+  rsocket:
+    server:
+      transport: websocket
+      mapping-path: /rsocket
+
+broker:
+  backoffice:
+    enabled: true
+    route: backoffice.room.events.ingest
+    endpoints:
+      - name: backoffice-a
+        url: ${BROKER_BACKOFFICE_ENDPOINT:ws://localhost:7901/rsocket}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

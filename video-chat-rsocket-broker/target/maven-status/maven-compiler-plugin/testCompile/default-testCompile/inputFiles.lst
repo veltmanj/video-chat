@@ -1,0 +1,2 @@
+${REPO_ROOT}/video-chat-rsocket-broker/src/test/java/com/example/videobroker/integration/BrokerRSocketIntegrationTest.java
+${REPO_ROOT}/video-chat-rsocket-broker/src/test/java/com/example/videobroker/service/RoomBrokerServiceTest.java

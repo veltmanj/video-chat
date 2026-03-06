@@ -1,0 +1,10 @@
+services:
+  caddy:
+    image: caddy:2.8
+    container_name: videochat-caddy
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/certs:ro

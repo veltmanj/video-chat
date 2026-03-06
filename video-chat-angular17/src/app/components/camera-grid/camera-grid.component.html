@@ -1,0 +1,31 @@
+<section class="grid">
+  <article class="tile" *ngFor="let feed of feeds">
+    <header class="tile-header">
+      <div>
+        <h3>{{ feed.ownerName }}</h3>
+        <p>{{ feed.label }}</p>
+      </div>
+      <span class="badge" [class.badge-local]="feed.local">{{ feed.local ? 'LOCAL' : 'REMOTE' }}</span>
+    </header>
+
+    <div class="video-shell" [class.video-shell-offline]="!feed.online">
+      <video
+        #feedVideo
+        *ngIf="feed.stream"
+        autoplay
+        playsinline
+        [muted]="feed.muted"
+        [attr.data-feed-id]="feed.id">
+      </video>
+
+      <div class="placeholder" *ngIf="!feed.stream">
+        <div class="pulse"></div>
+        <p>Wachten op stream...</p>
+      </div>
+    </div>
+
+    <footer class="tile-footer" *ngIf="feed.local">
+      <button type="button" (click)="removeFeed.emit(feed.id)">Stop camera</button>
+    </footer>
+  </article>
+</section>

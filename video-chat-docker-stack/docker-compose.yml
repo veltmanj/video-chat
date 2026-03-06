@@ -1,0 +1,70 @@
+services:
+  frontend:
+    build:
+      context: ../video-chat-angular17
+    container_name: videochat-frontend
+    restart: unless-stopped
+    networks:
+      - videochat
+
+  broker:
+    build:
+      context: ../video-chat-rsocket-broker
+    container_name: videochat-broker
+    restart: unless-stopped
+    environment:
+      BROKER_BACKOFFICE_ENDPOINT: ws://backoffice:7901/rsocket
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9898/actuator/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks:
+      - videochat
+
+  backoffice:
+    build:
+      context: ../video-chat-backoffice
+    container_name: videochat-backoffice
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:7901/actuator/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks:
+      - videochat
+
+  caddy:
+    image: caddy:2.8
+    container_name: videochat-caddy
+    restart: unless-stopped
+    depends_on:
+      frontend:
+        condition: service_started
+      broker:
+        condition: service_healthy
+      backoffice:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      VIDEOCHAT_HOST: ${VIDEOCHAT_HOST:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy-local-root-ca.crt:/srv/local-ca.crt:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - videochat
+
+networks:
+  videochat:
+    name: videochat-network
+
+volumes:
+  caddy-data:
+  caddy-config:
