@@ -1,8 +1,0 @@
-${REPO_ROOT}/video-chat-rsocket-broker/src/main/java/com/example/videobroker/VideoChatBrokerApplication.java
-${REPO_ROOT}/video-chat-rsocket-broker/src/main/java/com/example/videobroker/config/BackofficeRoutingProperties.java
-${REPO_ROOT}/video-chat-rsocket-broker/src/main/java/com/example/videobroker/controller/RoomEventController.java
-${REPO_ROOT}/video-chat-rsocket-broker/src/main/java/com/example/videobroker/model/RoomEventMessage.java
-${REPO_ROOT}/video-chat-rsocket-broker/src/main/java/com/example/videobroker/model/RoomPublishRequest.java
-${REPO_ROOT}/video-chat-rsocket-broker/src/main/java/com/example/videobroker/model/RoomStreamRequest.java
-${REPO_ROOT}/video-chat-rsocket-broker/src/main/java/com/example/videobroker/service/BackofficeForwardingService.java
-${REPO_ROOT}/video-chat-rsocket-broker/src/main/java/com/example/videobroker/service/RoomBrokerService.java

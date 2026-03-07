@@ -1,5 +1,0 @@
-${REPO_ROOT}/video-chat-backoffice/src/main/java/com/example/videobackoffice/VideoChatBackofficeApplication.java
-${REPO_ROOT}/video-chat-backoffice/src/main/java/com/example/videobackoffice/controller/BackofficeIngestRSocketController.java
-${REPO_ROOT}/video-chat-backoffice/src/main/java/com/example/videobackoffice/controller/BackofficeQueryController.java
-${REPO_ROOT}/video-chat-backoffice/src/main/java/com/example/videobackoffice/model/RoomEventMessage.java
-${REPO_ROOT}/video-chat-backoffice/src/main/java/com/example/videobackoffice/service/EventIngestService.java

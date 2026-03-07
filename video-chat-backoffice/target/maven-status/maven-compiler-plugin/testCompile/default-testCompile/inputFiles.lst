@@ -1,2 +1,0 @@
-${REPO_ROOT}/video-chat-backoffice/src/test/java/com/example/videobackoffice/integration/BackofficeIntegrationTest.java
-${REPO_ROOT}/video-chat-backoffice/src/test/java/com/example/videobackoffice/service/EventIngestServiceTest.java

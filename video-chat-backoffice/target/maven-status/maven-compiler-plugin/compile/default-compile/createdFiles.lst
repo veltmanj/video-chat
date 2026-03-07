@@ -1,5 +1,0 @@
-com/example/videobackoffice/model/RoomEventMessage.class
-com/example/videobackoffice/controller/BackofficeIngestRSocketController.class
-com/example/videobackoffice/controller/BackofficeQueryController.class
-com/example/videobackoffice/VideoChatBackofficeApplication.class
-com/example/videobackoffice/service/EventIngestService.class
