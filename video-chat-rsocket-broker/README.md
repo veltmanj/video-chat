@@ -1,69 +1,42 @@
-# Video Chat RSocket Broker (Spring Boot)
+# Video Chat RSocket Broker
 
-Spring Boot RSocket broker voor de Angular videochat-app.
+Spring Boot RSocket broker for the Angular video chat frontend. It accepts WebSocket-based RSocket clients, fans events out per room, and can forward the same events to one or more backoffice services.
 
-## Wat doet deze service?
+## Runtime endpoints
 
-- Accepteert RSocket clients via **WebSocket** op `/rsocket`.
-- Route `room.events.publish`: ontvangt room-events (join/chat/camera/webrtc-signal).
-- Route `room.events.stream`: streamt events per `roomId` naar subscribers.
-- Optioneel: forward events naar een backoffice RSocket endpoint (hash-based room routing).
+- RSocket over WebSocket: `ws://localhost:9898/rsocket`
+- Actuator health: `http://localhost:9898/actuator/health`
 
-## Configuratie
+## Core responsibilities
 
-Bestand: `src/main/resources/application.yml`
+- Accept `room.events.publish` requests from clients.
+- Stream `room.events.stream` updates to subscribers per room.
+- Forward broker traffic to backoffice endpoints when enabled.
 
-Belangrijk:
-
-- `spring.rsocket.server.port`: poort van de broker (`9898`)
-- `spring.rsocket.server.mapping-path`: websocket path (`/rsocket`)
-- `broker.backoffice.enabled`: zet op `true` voor forwarding
-- `broker.backoffice.endpoints`: lijst van backoffice RSocket URLs
-- `broker.backoffice.route`: backoffice route voor ingest
-
-## Starten
+## Quick start
 
 ```bash
 mvn spring-boot:run
 ```
 
-Of build + run:
+Useful checks:
 
 ```bash
-mvn clean package
-java -jar target/video-chat-rsocket-broker-0.0.1-SNAPSHOT.jar
+curl -s http://localhost:9898/actuator/health
+lsof -nP -iTCP:9898 -sTCP:LISTEN
 ```
 
-## Frontend koppeling
+## Configuration
 
-Gebruik in Angular broker URL zoals:
+Primary configuration lives in `src/main/resources/application.yml` and can be overridden with environment variables.
 
-- `ws://localhost:9898/rsocket`
+- `SERVER_PORT`: HTTP port, defaults to `9898`
+- `BROKER_RSOCKET_MAPPING_PATH`: WebSocket path for the RSocket server, defaults to `/rsocket`
+- `BROKER_BACKOFFICE_ENABLED`: enables forwarding, defaults to `true`
+- `BROKER_BACKOFFICE_ROUTE`: backoffice ingest route, defaults to `backoffice.room.events.ingest`
+- `BROKER_BACKOFFICE_ENDPOINT`: default single backoffice endpoint, defaults to `ws://localhost:7901/rsocket`
+- `MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE`: actuator exposure, defaults to `health,info`
 
-De huidige Angular frontend gebruikt payloads:
+## Operations guide
 
-- publish -> `room.events.publish` met `{ action, route, event }`
-- stream -> `room.events.stream` met `{ action, route, roomId, clientId }`
-
-Deze broker ondersteunt dat formaat direct.
-
-## End-to-end lokaal (met backoffice)
-
-1. Start backoffice:
-
-```bash
-cd ${REPO_ROOT}/video-chat-backoffice
-mvn spring-boot:run
-```
-
-2. Start broker:
-
-```bash
-cd ${REPO_ROOT}/video-chat-rsocket-broker
-mvn spring-boot:run
-```
-
-3. Controleer ingested events:
-
-- `http://localhost:7901/api/rooms`
-- `http://localhost:7901/api/rooms/main-stage/events?limit=50`
+Detailed install, configuration, testing, monitoring, and troubleshooting instructions live in [docs/INSTALL-CONFIGURE-MAINTAIN.md](docs/INSTALL-CONFIGURE-MAINTAIN.md).

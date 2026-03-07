@@ -1,88 +1,76 @@
-# Video Chat Docker Stack (HTTPS + WSS)
+# Video Chat Docker Stack
 
-This stack starts all required components with one command:
+Docker Compose stack for the Angular frontend, RSocket broker, Spring Boot backoffice, and Caddy reverse proxy with locally trusted HTTPS.
+
+## Included services
 
 - Angular frontend
 - RSocket broker
 - Backoffice service
-- Caddy reverse proxy with local HTTPS certificate (`tls internal`)
+- Caddy reverse proxy with `tls internal`
 
-## Ports
+## Quick start
 
-- `https://<LAN_IP>` (main app)
-- `http://<LAN_IP>` redirects to HTTPS
-
-The frontend uses:
-
-- `wss://<LAN_IP>/rsocket` (proxied to broker)
-
-## Prerequisites
-
-- Docker Desktop (or Docker Engine + Compose v2)
-
-## Start everything
+Assume `${REPO_ROOT}` is the directory containing this repository.
 
 ```bash
-cd ${REPO_ROOT}/video-chat-docker-stack
+cd "${REPO_ROOT}/video-chat-docker-stack"
 cp .env.example .env
-# optional: set your LAN IP so cert/SNI matches on other devices
-# VIDEOCHAT_HOST=192.168.1.100
+# set VIDEOCHAT_HOST to your LAN IP if other devices need to connect
+./scripts/validate.sh
 ./scripts/up.sh
 ```
 
-## Restart after config changes
+## Runtime URLs
 
-- If you changed `Caddyfile` or `VIDEOCHAT_HOST`: recreate only caddy
+- App: `https://<VIDEOCHAT_HOST>`
+- RSocket broker: `wss://<VIDEOCHAT_HOST>/rsocket`
+- Backoffice REST API: `https://<VIDEOCHAT_HOST>/backoffice-api/api/rooms`
+- Local CA download: `http://<VIDEOCHAT_HOST>/local-ca.crt`
+
+## Common operations
+
+Bring the stack up:
 
 ```bash
-cd ${REPO_ROOT}/video-chat-docker-stack
-docker compose up -d --force-recreate caddy
+./scripts/up.sh
 ```
 
-- If you changed app code (frontend/broker/backoffice): rebuild stack
+Stop it:
 
 ```bash
-cd ${REPO_ROOT}/video-chat-docker-stack
-docker compose up -d --build
-```
-
-## Trust local CA on iPad
-
-Caddy creates its own local CA. Export it:
-
-```bash
-cd ${REPO_ROOT}/video-chat-docker-stack
-./scripts/export-caddy-root-ca.sh
-```
-
-This creates:
-
-- `caddy-local-root-ca.crt`
-
-Install this certificate on iPad and enable trust:
-
-1. Install profile/certificate
-2. `Settings > General > About > Certificate Trust Settings`
-3. Enable full trust for this CA
-
-Then open:
-
-- `https://<LAN_IP>`
-
-## Download cert via LAN URL
-
-After export + caddy restart, the certificate is downloadable directly from your host:
-
-- `http://<LAN_IP>/local-ca.crt`
-- `https://<LAN_IP>/local-ca.crt`
-
-Example:
-
-- `http://<IP-ADDRESS>/local-ca.crt`
-
-## Stop stack
-
-```bash
-cd ${REPO_ROOT}/video-chat-docker-stack
 ./scripts/down.sh
 ```
+
+Validate Compose and Caddy config:
+
+```bash
+./scripts/validate.sh
+```
+
+Check service health and published ports:
+
+```bash
+./scripts/check.sh
+```
+
+Tail logs:
+
+```bash
+./scripts/logs.sh
+./scripts/logs.sh caddy
+```
+
+## Configuration
+
+Main configuration lives in `.env`, `docker-compose.yml`, and `Caddyfile`.
+
+Key variables:
+
+- `VIDEOCHAT_HOST`: hostname or LAN IP presented by Caddy
+- `CADDY_IMAGE`: Caddy image tag, defaults to `caddy:2.10.2`
+- `CADDY_LOCAL_CA_FILENAME`: exported local CA certificate filename
+
+## Operations guide
+
+Detailed install, configuration, monitoring, and troubleshooting instructions live in [docs/INSTALL-CONFIGURE-MAINTAIN.md](docs/INSTALL-CONFIGURE-MAINTAIN.md).

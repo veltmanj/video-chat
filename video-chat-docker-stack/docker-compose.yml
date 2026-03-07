@@ -1,46 +1,45 @@
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  networks:
+    - videochat
+
+x-http-healthcheck: &http-healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 15s
+
 services:
   frontend:
+    <<: *service-defaults
     build:
-      context: ../video-chat-angular17
-    container_name: videochat-frontend
-    restart: unless-stopped
-    networks:
-      - videochat
+      context: ../video-chat-angular
+    container_name: ${FRONTEND_CONTAINER_NAME:-videochat-frontend}
 
   broker:
+    <<: *service-defaults
     build:
       context: ../video-chat-rsocket-broker
-    container_name: videochat-broker
-    restart: unless-stopped
+    container_name: ${BROKER_CONTAINER_NAME:-videochat-broker}
     environment:
       BROKER_BACKOFFICE_ENDPOINT: ws://backoffice:7901/rsocket
     healthcheck:
+      <<: *http-healthcheck
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9898/actuator/health >/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 15s
-    networks:
-      - videochat
 
   backoffice:
+    <<: *service-defaults
     build:
       context: ../video-chat-backoffice
-    container_name: videochat-backoffice
-    restart: unless-stopped
+    container_name: ${BACKOFFICE_CONTAINER_NAME:-videochat-backoffice}
     healthcheck:
+      <<: *http-healthcheck
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:7901/actuator/health >/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 15s
-    networks:
-      - videochat
 
   caddy:
-    image: caddy:2.8
-    container_name: videochat-caddy
-    restart: unless-stopped
+    <<: *service-defaults
+    image: ${CADDY_IMAGE:-caddy:2.10.2}
+    container_name: ${CADDY_CONTAINER_NAME:-videochat-caddy}
     depends_on:
       frontend:
         condition: service_started
@@ -53,13 +52,12 @@ services:
       - "443:443"
     environment:
       VIDEOCHAT_HOST: ${VIDEOCHAT_HOST:-localhost}
+      CADDY_LOCAL_CA_FILENAME: ${CADDY_LOCAL_CA_FILENAME:-caddy-local-root-ca.crt}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./caddy-local-root-ca.crt:/srv/local-ca.crt:ro
+      - ./${CADDY_LOCAL_CA_FILENAME:-caddy-local-root-ca.crt}:/srv/local-ca.crt:ro
       - caddy-data:/data
       - caddy-config:/config
-    networks:
-      - videochat
 
 networks:
   videochat:

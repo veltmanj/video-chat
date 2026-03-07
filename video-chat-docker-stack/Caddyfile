@@ -1,62 +1,66 @@
 {
-  default_sni {$VIDEOCHAT_HOST:localhost}
-  auto_https disable_redirects
+	default_sni {$VIDEOCHAT_HOST:localhost}
+	auto_https disable_redirects
+}
+
+(common_headers) {
+	header Content-Type application/x-x509-ca-cert
+	header Content-Disposition "attachment; filename="{$CADDY_LOCAL_CA_FILENAME:caddy-local-root-ca.crt}""
+}
+
+(ca_download) {
+	root * /srv
+	import common_headers
+	rewrite * /local-ca.crt
+	file_server
 }
 
 :80 {
-  handle /local-ca.crt {
-    root * /srv
-    header Content-Type application/x-x509-ca-cert
-    header Content-Disposition "attachment; filename=\"caddy-local-root-ca.crt\""
-    rewrite * /local-ca.crt
-    file_server
-  }
+	handle /local-ca.crt {
+		import ca_download
+	}
 
-  handle {
-    redir https://{$VIDEOCHAT_HOST:localhost}{uri}
-  }
+	handle {
+		redir https://{$VIDEOCHAT_HOST:localhost}{uri}
+	}
 }
 
 {$VIDEOCHAT_HOST:localhost}:443 {
-  tls internal
-  log {
-    output stdout
-    format json
-  }
+	tls internal
+	log {
+		output stdout
+		format json
+	}
 
-  handle /local-ca.crt {
-    root * /srv
-    header Content-Type application/x-x509-ca-cert
-    header Content-Disposition "attachment; filename=\"caddy-local-root-ca.crt\""
-    rewrite * /local-ca.crt
-    file_server
-  }
+	handle /local-ca.crt {
+		import ca_download
+	}
 
-  @broker_rsocket path /rsocket*
-  @broker_rsocket_protocol {
-    path /rsocket*
-    header Sec-WebSocket-Protocol *
-  }
-  header @broker_rsocket_protocol Sec-WebSocket-Protocol {http.request.header.Sec-WebSocket-Protocol}
-  reverse_proxy @broker_rsocket broker:9898 {
-    header_up Sec-WebSocket-Protocol {http.request.header.Sec-WebSocket-Protocol}
-    header_down Sec-WebSocket-Protocol {http.request.header.Sec-WebSocket-Protocol}
-    transport http {
-      versions h1_1
-    }
-    lb_try_duration 5s
-    lb_try_interval 250ms
-  }
+	@broker_rsocket path /rsocket*
+	@broker_rsocket_protocol {
+		path /rsocket*
+		header Sec-WebSocket-Protocol *
+	}
+	header @broker_rsocket_protocol Sec-WebSocket-Protocol {http.request.header.Sec-WebSocket-Protocol}
+	reverse_proxy @broker_rsocket broker:9898 {
+		header_up Sec-WebSocket-Protocol {http.request.header.Sec-WebSocket-Protocol}
+		header_down Sec-WebSocket-Protocol {http.request.header.Sec-WebSocket-Protocol}
+		transport http {
+			versions 1.1
+		}
+		lb_try_duration 5s
+		lb_try_interval 250ms
+	}
 
-  handle_path /backoffice-api/* {
-    reverse_proxy backoffice:7901
-  }
+	handle_path /backoffice-api/* {
+		reverse_proxy backoffice:7901
+	}
 
-  @backoffice_rsocket path /backoffice-rsocket*
-  handle @backoffice_rsocket {
-    rewrite * /rsocket
-    reverse_proxy backoffice:7901
-  }
+	@backoffice_rsocket path /backoffice-rsocket*
+	handle @backoffice_rsocket {
+		rewrite * /rsocket
+		reverse_proxy backoffice:7901
+	}
 
-  reverse_proxy frontend:80
+	reverse_proxy frontend:80
 }
