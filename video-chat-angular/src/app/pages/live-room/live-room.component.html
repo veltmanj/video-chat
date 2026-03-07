@@ -1,0 +1,70 @@
+<main class="live-shell">
+  <section class="control-bar">
+    <div class="room-card">
+      <h1>PulseRoom Live</h1>
+      <p>Angular 21 + RSocket broker mesh + multi-webcam control room</p>
+      <div class="state" [class.state-connected]="connected">{{ connectionState }}</div>
+    </div>
+
+    <form class="join-form" (ngSubmit)="connectRoom()">
+      <label>
+        Display name
+        <input type="text" name="displayName" [(ngModel)]="displayName" maxlength="40">
+      </label>
+
+      <label>
+        Room ID
+        <input type="text" name="roomId" [(ngModel)]="roomId" maxlength="40">
+      </label>
+
+      <label>
+        Broker URL(s)
+        <textarea
+          name="brokerEndpoints"
+          [(ngModel)]="brokerEndpoints"
+          rows="2"
+          autocomplete="off"
+          placeholder="wss://<host>/rsocket">
+        </textarea>
+      </label>
+
+      <div class="actions">
+        <button type="submit" [disabled]="connected || isConnecting">{{ isConnecting ? 'Connecting...' : 'Connect' }}</button>
+        <button type="button" class="ghost" (click)="disconnectRoom()" [disabled]="!connected">Disconnect</button>
+      </div>
+    </form>
+
+    <section class="camera-controls">
+      <h2>Camera registratie</h2>
+      <p>Selecteer een webcam en publiceer hem in de room.</p>
+      <div class="camera-actions">
+        <select [(ngModel)]="selectedDeviceSelection" name="selectedDeviceSelection">
+          <option value="">Selecteer camera</option>
+          <option *ngFor="let device of devices; let i = index" [value]="i">{{ device.label }}</option>
+        </select>
+        <button type="button" class="ghost" (click)="refreshDevices()">Refresh</button>
+        <button type="button" (click)="addCamera()" [disabled]="!canAddCamera()">{{ isAddingCamera ? 'Adding...' : 'Add webcam' }}</button>
+      </div>
+    </section>
+  </section>
+
+  <section *ngIf="uiError || uiInfo" class="status-banner">
+    <p class="status-error" *ngIf="uiError">{{ uiError }}</p>
+    <p class="status-info" *ngIf="uiInfo">{{ uiInfo }}</p>
+  </section>
+
+  <section class="stage-layout">
+    <app-camera-grid
+      class="grid-zone"
+      [feeds]="feeds"
+      (removeFeed)="removeCamera($event)">
+    </app-camera-grid>
+
+    <app-chat-panel
+      class="chat-zone"
+      [messages]="messages"
+      [connected]="connected"
+      (sendMessage)="sendMessage($event)">
+    </app-chat-panel>
+  </section>
+</main>

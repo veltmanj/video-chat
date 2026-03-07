@@ -1,0 +1,153 @@
+:host {
+  display: block;
+  min-height: 100vh;
+  color: #f8fafc;
+}
+
+.live-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(20, 184, 166, 0.28), transparent 35%),
+    radial-gradient(circle at 78% 15%, rgba(249, 115, 22, 0.2), transparent 36%),
+    linear-gradient(145deg, #020617 0%, #0b1738 55%, #111827 100%);
+  padding: 1.1rem;
+}
+
+.control-bar {
+  display: grid;
+  grid-template-columns: 1.2fr 1.6fr 1.4fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.room-card,
+.join-form,
+.camera-controls {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 18px;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.58);
+  backdrop-filter: blur(9px);
+}
+
+.room-card h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.room-card p {
+  margin: 0.45rem 0 0;
+  opacity: 0.75;
+}
+
+.state {
+  margin-top: 0.9rem;
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  font-weight: 700;
+  font-size: 0.74rem;
+  background: rgba(239, 68, 68, 0.25);
+  color: #fecaca;
+}
+
+.state-connected {
+  background: rgba(34, 197, 94, 0.25);
+  color: #bbf7d0;
+}
+
+.join-form,
+.camera-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.72rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+  font-size: 0.82rem;
+  color: rgba(241, 245, 249, 0.92);
+}
+
+input,
+textarea,
+select {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.25);
+  color: #f8fafc;
+  padding: 0.55rem;
+}
+
+.actions,
+.camera-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+button {
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  padding: 0.58rem 0.9rem;
+  font-weight: 700;
+  background: linear-gradient(120deg, #2563eb, #14b8a6);
+  cursor: pointer;
+}
+
+button.ghost {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.stage-layout {
+  display: grid;
+  grid-template-columns: 2fr minmax(300px, 0.9fr);
+  gap: 1rem;
+}
+
+.status-banner {
+  margin: 0.25rem 0 1rem;
+}
+
+.status-banner p {
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+
+.status-error {
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  background: rgba(127, 29, 29, 0.35);
+  color: #fecaca;
+}
+
+.status-info {
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  background: rgba(20, 83, 45, 0.35);
+  color: #bbf7d0;
+}
+
+.grid-zone,
+.chat-zone {
+  min-height: 500px;
+}
+
+@media (max-width: 1160px) {
+  .control-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .stage-layout {
+    grid-template-columns: 1fr;
+  }
+}
