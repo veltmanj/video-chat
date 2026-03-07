@@ -1,6 +1,6 @@
 server:
-  address: 0.0.0.0
-  port: 7901
+  address: ${SERVER_ADDRESS:0.0.0.0}
+  port: ${SERVER_PORT:7901}
 
 spring:
   application:
@@ -8,10 +8,10 @@ spring:
   rsocket:
     server:
       transport: websocket
-      mapping-path: /rsocket
+      mapping-path: ${BACKOFFICE_RSOCKET_MAPPING_PATH:/rsocket}
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,info}

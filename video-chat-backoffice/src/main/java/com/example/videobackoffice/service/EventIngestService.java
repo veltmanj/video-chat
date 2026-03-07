@@ -3,56 +3,93 @@ package com.example.videobackoffice.service;
 import com.example.videobackoffice.model.RoomEventMessage;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
+/**
+ * Stores a bounded in-memory event history per room for operational inspection.
+ */
 @Service
 public class EventIngestService {
 
-    private static final int MAX_PER_ROOM = 1000;
+    static final int MAX_EVENTS_PER_ROOM = 1_000;
+    static final int MAX_QUERY_LIMIT = 500;
 
-    private final Map<String, ConcurrentLinkedDeque<RoomEventMessage>> roomEvents = new ConcurrentHashMap<>();
+    private static final Comparator<RoomEventMessage> BY_LATEST_FIRST = Comparator
+        .comparing(RoomEventMessage::sentAt, Comparator.nullsLast(Comparator.naturalOrder()))
+        .reversed();
+
+    private final Clock clock;
+    private final Map<String, Deque<RoomEventMessage>> roomEvents = new ConcurrentHashMap<>();
+
+    public EventIngestService(Clock clock) {
+        this.clock = clock;
+    }
 
     public void ingest(RoomEventMessage event) {
-        if (event == null || event.getRoomId() == null || event.getRoomId().isBlank()) {
-            return;
-        }
-
-        if (event.getSentAt() == null) {
-            event.setSentAt(Instant.now());
-        }
-
-        ConcurrentLinkedDeque<RoomEventMessage> queue = roomEvents.computeIfAbsent(event.getRoomId(), key -> new ConcurrentLinkedDeque<>());
-        queue.addLast(event);
-
-        while (queue.size() > MAX_PER_ROOM) {
-            queue.pollFirst();
-        }
+        normalize(event).ifPresent(normalizedEvent -> appendToRoom(normalizedEvent.roomId(), normalizedEvent));
     }
 
     public List<RoomEventMessage> latestForRoom(String roomId, int limit) {
-        if (roomId == null || roomId.isBlank()) {
+        if (!hasText(roomId)) {
             return List.of();
         }
 
-        ConcurrentLinkedDeque<RoomEventMessage> queue = roomEvents.get(roomId);
-        if (queue == null || queue.isEmpty()) {
+        Deque<RoomEventMessage> events = roomEvents.get(roomId);
+        if (events == null || events.isEmpty()) {
             return List.of();
         }
 
-        List<RoomEventMessage> events = new ArrayList<>(queue);
-        events.sort(Comparator.comparing(RoomEventMessage::getSentAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed());
-
-        int safeLimit = Math.max(1, Math.min(limit, 500));
-        return events.subList(0, Math.min(events.size(), safeLimit));
+        return events.stream()
+            .sorted(BY_LATEST_FIRST)
+            .limit(sanitizeLimit(limit))
+            .toList();
     }
 
     public List<String> activeRooms() {
         return roomEvents.keySet().stream().sorted().toList();
+    }
+
+    private Optional<RoomEventMessage> normalize(RoomEventMessage event) {
+        if (event == null || !event.hasRoomId()) {
+            return Optional.empty();
+        }
+
+        if (event.sentAt() != null) {
+            return Optional.of(event);
+        }
+
+        return Optional.of(event.withSentAt(Instant.now(clock)));
+    }
+
+    private void appendToRoom(String roomId, RoomEventMessage event) {
+        Deque<RoomEventMessage> roomQueue = roomEvents.computeIfAbsent(roomId, ignored -> new ConcurrentLinkedDeque<>());
+        roomQueue.addLast(event);
+        trimToRetentionLimit(roomQueue);
+    }
+
+    private void trimToRetentionLimit(Deque<RoomEventMessage> roomQueue) {
+        while (roomQueue.size() > MAX_EVENTS_PER_ROOM) {
+            roomQueue.pollFirst();
+        }
+    }
+
+    private long sanitizeLimit(int requestedLimit) {
+        if (requestedLimit <= 0) {
+            return 1;
+        }
+
+        return Math.min(requestedLimit, MAX_QUERY_LIMIT);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

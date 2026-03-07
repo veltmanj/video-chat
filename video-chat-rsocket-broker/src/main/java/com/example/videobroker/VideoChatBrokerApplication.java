@@ -7,17 +7,25 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.boot.web.context.WebServerInitializedEvent;
+import org.springframework.boot.web.server.context.WebServerInitializedEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 
-@SpringBootApplication
+import java.time.Clock;
+
+@SpringBootApplication(proxyBeanMethods = false)
 @EnableConfigurationProperties(BackofficeRoutingProperties.class)
 public class VideoChatBrokerApplication {
+
     private static final Logger log = LoggerFactory.getLogger(VideoChatBrokerApplication.class);
 
     public static void main(String[] args) {
         SpringApplication.run(VideoChatBrokerApplication.class, args);
+    }
+
+    @Bean
+    Clock applicationClock() {
+        return Clock.systemUTC();
     }
 
     @Bean

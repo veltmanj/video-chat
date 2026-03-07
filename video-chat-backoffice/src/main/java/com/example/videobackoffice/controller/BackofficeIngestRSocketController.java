@@ -22,10 +22,13 @@ public class BackofficeIngestRSocketController {
     @MessageMapping("backoffice.room.events.ingest")
     public Mono<Void> ingest(RoomEventMessage event) {
         eventIngestService.ingest(event);
-        if (event != null) {
-            log.info("Ingested event type={} room={} sender={}", event.getType(), event.getRoomId(), event.getSenderId());
+
+        if (event == null || !event.hasRoomId()) {
+            log.debug("Ignoring invalid backoffice event payload");
+            return Mono.empty();
         }
 
+        log.info("Ingested event type={} room={} sender={}", event.type(), event.roomId(), event.senderId());
         return Mono.empty();
     }
 }

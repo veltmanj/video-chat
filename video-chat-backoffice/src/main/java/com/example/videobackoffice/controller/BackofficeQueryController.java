@@ -1,6 +1,7 @@
 package com.example.videobackoffice.controller;
 
 import com.example.videobackoffice.model.RoomEventMessage;
+import com.example.videobackoffice.model.RoomListResponse;
 import com.example.videobackoffice.service.EventIngestService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -8,7 +9,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 public class BackofficeQueryController {
@@ -20,12 +20,9 @@ public class BackofficeQueryController {
     }
 
     @GetMapping("/api/rooms")
-    public Map<String, Object> rooms() {
+    public RoomListResponse rooms() {
         List<String> rooms = eventIngestService.activeRooms();
-        return Map.of(
-            "count", rooms.size(),
-            "rooms", rooms
-        );
+        return new RoomListResponse(rooms.size(), rooms);
     }
 
     @GetMapping("/api/rooms/{roomId}/events")

@@ -5,10 +5,10 @@ import com.example.videobroker.model.RoomPublishRequest;
 import com.example.videobroker.model.RoomStreamRequest;
 import io.rsocket.transport.netty.client.WebsocketClientTransport;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.messaging.rsocket.RSocketRequester;
@@ -29,7 +29,6 @@ import static org.assertj.core.api.Assertions.assertThat;
         "management.endpoints.web.exposure.include=health,info"
     }
 )
-@AutoConfigureWebTestClient
 class BrokerRSocketIntegrationTest {
 
     @LocalServerPort
@@ -41,10 +40,15 @@ class BrokerRSocketIntegrationTest {
     @Autowired
     private RSocketRequester.Builder requesterBuilder;
 
-    @Autowired
+    private RSocketRequester requester;
     private WebTestClient webTestClient;
 
-    private RSocketRequester requester;
+    @BeforeEach
+    void setUp() {
+        webTestClient = WebTestClient.bindToServer()
+            .baseUrl("http://localhost:" + port)
+            .build();
+    }
 
     @AfterEach
     void cleanUp() {
@@ -65,27 +69,27 @@ class BrokerRSocketIntegrationTest {
 
     @Test
     void shouldReceivePublishedEventsOverRSocketWebsocket() {
-        requester = requesterBuilder.transport(
-            WebsocketClientTransport.create(brokerUri())
+        requester = requesterBuilder.transport(WebsocketClientTransport.create(brokerUri()));
+
+        RoomStreamRequest streamRequest = new RoomStreamRequest(
+            "SUBSCRIBE_ROOM",
+            "room.events.stream",
+            "room-int-1",
+            "client-sub"
         );
-
-        RoomStreamRequest streamRequest = new RoomStreamRequest();
-        streamRequest.setAction("SUBSCRIBE_ROOM");
-        streamRequest.setRoute("room.events.stream");
-        streamRequest.setRoomId("room-int-1");
-        streamRequest.setClientId("client-sub");
-
-        RoomEventMessage event = new RoomEventMessage();
-        event.setType("ROOM_JOINED");
-        event.setRoomId("room-int-1");
-        event.setSenderId("client-pub");
-        event.setSenderName("Publisher");
-        event.setPayload(Map.of("capability", "multi-webcam"));
-
-        RoomPublishRequest publishRequest = new RoomPublishRequest();
-        publishRequest.setAction("ROOM_EVENT");
-        publishRequest.setRoute("room.events.publish");
-        publishRequest.setEvent(event);
+        RoomEventMessage event = new RoomEventMessage(
+            "ROOM_JOINED",
+            "room-int-1",
+            "client-pub",
+            "Publisher",
+            null,
+            Map.of("capability", "multi-webcam")
+        );
+        RoomPublishRequest publishRequest = new RoomPublishRequest(
+            "ROOM_EVENT",
+            "room.events.publish",
+            event
+        );
 
         Flux<RoomEventMessage> stream = requester.route("room.events.stream")
             .data(streamRequest)
@@ -98,10 +102,10 @@ class BrokerRSocketIntegrationTest {
                 .send()
                 .block(Duration.ofSeconds(3)))
             .assertNext(received -> {
-                assertThat(received.getRoomId()).isEqualTo("room-int-1");
-                assertThat(received.getType()).isEqualTo("ROOM_JOINED");
-                assertThat(received.getSenderId()).isEqualTo("client-pub");
-                assertThat(received.getPayload()).containsEntry("capability", "multi-webcam");
+                assertThat(received.roomId()).isEqualTo("room-int-1");
+                assertThat(received.type()).isEqualTo("ROOM_JOINED");
+                assertThat(received.senderId()).isEqualTo("client-pub");
+                assertThat(received.payload()).containsEntry("capability", "multi-webcam");
             })
             .verifyComplete();
     }

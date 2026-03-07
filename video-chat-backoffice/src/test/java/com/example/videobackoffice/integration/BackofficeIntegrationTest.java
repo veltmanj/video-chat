@@ -3,10 +3,10 @@ package com.example.videobackoffice.integration;
 import com.example.videobackoffice.model.RoomEventMessage;
 import io.rsocket.transport.netty.client.WebsocketClientTransport;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.messaging.rsocket.RSocketRequester;
@@ -16,7 +16,6 @@ import java.net.URI;
 import java.util.Map;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureWebTestClient
 class BackofficeIntegrationTest {
 
     @LocalServerPort
@@ -28,10 +27,15 @@ class BackofficeIntegrationTest {
     @Autowired
     private RSocketRequester.Builder requesterBuilder;
 
-    @Autowired
+    private RSocketRequester requester;
     private WebTestClient webTestClient;
 
-    private RSocketRequester requester;
+    @BeforeEach
+    void setUp() {
+        webTestClient = WebTestClient.bindToServer()
+            .baseUrl("http://localhost:" + port)
+            .build();
+    }
 
     @AfterEach
     void cleanUp() {
@@ -42,16 +46,16 @@ class BackofficeIntegrationTest {
 
     @Test
     void shouldIngestViaRSocketAndExposeViaRestApis() {
-        requester = requesterBuilder.transport(
-            WebsocketClientTransport.create(backofficeUri())
-        );
+        requester = requesterBuilder.transport(WebsocketClientTransport.create(backofficeUri()));
 
-        RoomEventMessage event = new RoomEventMessage();
-        event.setType("CHAT_MESSAGE");
-        event.setRoomId("room-backoffice-int");
-        event.setSenderId("sender-1");
-        event.setSenderName("Sender");
-        event.setPayload(Map.of("text", "hello from integration test"));
+        RoomEventMessage event = new RoomEventMessage(
+            "CHAT_MESSAGE",
+            "room-backoffice-int",
+            "sender-1",
+            "Sender",
+            null,
+            Map.of("text", "hello from integration test")
+        );
 
         requester.route("backoffice.room.events.ingest")
             .data(event)
@@ -63,7 +67,8 @@ class BackofficeIntegrationTest {
             .exchange()
             .expectStatus().isOk()
             .expectBody()
-            .jsonPath("$.rooms[0]").isEqualTo("room-backoffice-int");
+            .jsonPath("$.rooms[0]").isEqualTo("room-backoffice-int")
+            .jsonPath("$.count").isEqualTo(1);
 
         webTestClient.get()
             .uri("/api/rooms/room-backoffice-int/events?limit=1")

@@ -1,6 +1,6 @@
 server:
-  address: 0.0.0.0
-  port: 9898
+  address: ${SERVER_ADDRESS:0.0.0.0}
+  port: ${SERVER_PORT:9898}
 
 spring:
   application:
@@ -8,12 +8,12 @@ spring:
   rsocket:
     server:
       transport: websocket
-      mapping-path: /rsocket
+      mapping-path: ${BROKER_RSOCKET_MAPPING_PATH:/rsocket}
 
 broker:
   backoffice:
-    enabled: true
-    route: backoffice.room.events.ingest
+    enabled: ${BROKER_BACKOFFICE_ENABLED:true}
+    route: ${BROKER_BACKOFFICE_ROUTE:backoffice.room.events.ingest}
     endpoints:
       - name: backoffice-a
         url: ${BROKER_BACKOFFICE_ENDPOINT:ws://localhost:7901/rsocket}
@@ -22,4 +22,4 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,info}

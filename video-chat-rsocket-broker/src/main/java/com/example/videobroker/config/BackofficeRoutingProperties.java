@@ -5,11 +5,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Configuration for optional broker-to-backoffice forwarding.
+ */
 @ConfigurationProperties(prefix = "broker.backoffice")
 public class BackofficeRoutingProperties {
 
+    private static final String DEFAULT_ROUTE = "backoffice.room.events.ingest";
+
     private boolean enabled;
-    private String route = "backoffice.room.events.ingest";
+    private String route = DEFAULT_ROUTE;
     private List<BackofficeEndpoint> endpoints = new ArrayList<>();
 
     public boolean isEnabled() {
@@ -21,7 +26,7 @@ public class BackofficeRoutingProperties {
     }
 
     public String getRoute() {
-        return route;
+        return hasText(route) ? route : DEFAULT_ROUTE;
     }
 
     public void setRoute(String route) {
@@ -33,10 +38,19 @@ public class BackofficeRoutingProperties {
     }
 
     public void setEndpoints(List<BackofficeEndpoint> endpoints) {
-        this.endpoints = endpoints;
+        this.endpoints = endpoints == null ? new ArrayList<>() : new ArrayList<>(endpoints);
+    }
+
+    public List<BackofficeEndpoint> usableEndpoints() {
+        return endpoints.stream().filter(BackofficeEndpoint::hasUrl).toList();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     public static class BackofficeEndpoint {
+
         private String name;
         private String url;
 
@@ -54,6 +68,14 @@ public class BackofficeRoutingProperties {
 
         public void setUrl(String url) {
             this.url = url;
+        }
+
+        public boolean hasUrl() {
+            return url != null && !url.isBlank();
+        }
+
+        public String displayName() {
+            return name == null || name.isBlank() ? url : name;
         }
     }
 }
