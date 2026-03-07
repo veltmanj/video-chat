@@ -58,7 +58,7 @@ public class BackofficeForwardingService {
 
             requester.route(properties.getRoute())
                 .data(event)
-                .send()
+                .retrieveMono(Void.class)
                 .doOnSuccess(ignored -> log.info(
                     "Forwarded event type={} room={} to {}",
                     event.type(),

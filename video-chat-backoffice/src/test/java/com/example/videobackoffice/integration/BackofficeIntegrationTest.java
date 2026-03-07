@@ -59,7 +59,7 @@ class BackofficeIntegrationTest {
 
         requester.route("backoffice.room.events.ingest")
             .data(event)
-            .send()
+            .retrieveMono(Void.class)
             .block();
 
         webTestClient.get()
