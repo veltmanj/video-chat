@@ -15,6 +15,12 @@ import java.time.Clock;
 
 @SpringBootApplication(proxyBeanMethods = false)
 @EnableConfigurationProperties(BackofficeRoutingProperties.class)
+/**
+ * Entry point for the room event broker.
+ *
+ * <p>The broker exposes RSocket routes for publish/stream semantics and optionally mirrors events to
+ * one or more backoffice services.
+ */
 public class VideoChatBrokerApplication {
 
     private static final Logger log = LoggerFactory.getLogger(VideoChatBrokerApplication.class);
@@ -24,11 +30,18 @@ public class VideoChatBrokerApplication {
     }
 
     @Bean
+    /**
+     * Shared UTC clock used when the broker has to stamp events that arrived without a timestamp.
+     */
     Clock applicationClock() {
         return Clock.systemUTC();
     }
 
     @Bean
+    /**
+     * Logs the effective local endpoints after startup so operational checks can verify the process
+     * without opening the code or config.
+     */
     ApplicationListener<WebServerInitializedEvent> logStartupEndpoints(
         @Value("${spring.rsocket.server.mapping-path:/rsocket}") String mappingPath
     ) {

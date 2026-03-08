@@ -12,6 +12,9 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Controller
+/**
+ * RSocket controller that exposes the broker publish and stream routes used by frontend clients.
+ */
 public class RoomEventController {
 
     private static final Logger log = LoggerFactory.getLogger(RoomEventController.class);
@@ -23,6 +26,9 @@ public class RoomEventController {
     }
 
     @MessageMapping("room.events.publish")
+    /**
+     * Accepts a single room event and republishes it to the in-memory room stream.
+     */
     public Mono<Void> publish(RoomPublishRequest request) {
         if (request == null || !request.hasEvent()) {
             log.warn("Publish route invoked without an event payload");
@@ -39,6 +45,9 @@ public class RoomEventController {
     }
 
     @MessageMapping("room.events.stream")
+    /**
+     * Opens a live subscription for a single room.
+     */
     public Flux<RoomEventMessage> stream(RoomStreamRequest request) {
         if (request == null || !request.hasRoomId()) {
             log.warn("Stream route invoked without a valid roomId");

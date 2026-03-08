@@ -23,10 +23,16 @@ public record RoomEventMessage(
             : Collections.unmodifiableMap(new LinkedHashMap<>(payload));
     }
 
+    /**
+     * The backoffice only indexes events that can be associated with a room.
+     */
     public boolean hasRoomId() {
         return roomId != null && !roomId.isBlank();
     }
 
+    /**
+     * Returns a copy with a normalized timestamp while keeping the rest of the payload immutable.
+     */
     public RoomEventMessage withSentAt(Instant timestamp) {
         return new RoomEventMessage(type, roomId, senderId, senderName, timestamp, payload);
     }

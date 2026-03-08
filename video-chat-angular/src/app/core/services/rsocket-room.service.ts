@@ -77,6 +77,15 @@ interface RoomEventEnvelope {
 @Injectable({
   providedIn: 'root'
 })
+/**
+ * Owns the broker connection lifecycle for the Angular client.
+ *
+ * Responsibilities:
+ * - open and close the RSocket-over-WebSocket connection
+ * - publish room events
+ * - keep a room event stream alive with reconnect logic
+ * - translate browser-relative broker URLs into ws/wss endpoints
+ */
 export class RsocketRoomService {
   private static readonly ROUTES = {
     publish: 'room.events.publish',
@@ -96,18 +105,30 @@ export class RsocketRoomService {
   private brokerState: BrokerState | null = null;
   private currentRoomId = '';
   private identity: ClientIdentity | null = null;
+  /**
+   * Last normalized broker URL list supplied by the UI. Reconnects reuse this exact ordered list.
+   */
   private brokerUrls: string[] = [];
   private reconnectTimer: TimerHandle | null = null;
   private reconnecting = false;
   private reconnectEnabled = false;
   private streamSubscription: BrokerSubscription | null = null;
+  /**
+   * Incremented for each new room stream subscription so late callbacks from old streams can be ignored safely.
+   */
   private streamToken = 0;
+  /**
+   * Remember the last working broker endpoint so reconnect attempts try that one first.
+   */
   private preferredBrokerUrl: string | null = null;
   private pendingConnectCancel: (() => void) | null = null;
 
   readonly state$: Observable<ConnectionState> = this.stateSubject.asObservable();
   readonly roomEvents$: Observable<RoomEvent> = this.eventsSubject.asObservable();
 
+  /**
+   * Opens a broker connection and subscribes the client to room events.
+   */
   async connect(
     identity: ClientIdentity,
     roomId: string,
@@ -144,6 +165,9 @@ export class RsocketRoomService {
     throw latestError || new Error('Verbinding met brokers mislukt.');
   }
 
+  /**
+   * Disconnects the client intentionally. This disables reconnects and attempts a best-effort ROOM_LEFT publish.
+   */
   disconnect(): void {
     this.reconnectEnabled = false;
     this.clearReconnectTimer();
@@ -160,6 +184,9 @@ export class RsocketRoomService {
     this.transitionTo('DISCONNECTED');
   }
 
+  /**
+   * Publishes an event without waiting for broker acknowledgement.
+   */
   publish<TType extends RoomEventType>(type: TType, payload: RoomEventPayloadMap[TType]): void {
     const event = this.buildEvent(type, payload);
     const socket = this.brokerState?.socket;
@@ -170,6 +197,9 @@ export class RsocketRoomService {
     socket.fireAndForget(this.createEventRequest(event));
   }
 
+  /**
+   * Publishes an event and resolves whether the broker acknowledged it.
+   */
   publishWithAck<TType extends RoomEventType>(type: TType, payload: RoomEventPayloadMap[TType]): Promise<boolean> {
     const event = this.buildEvent(type, payload);
     const socket = this.brokerState?.socket;
@@ -197,6 +227,9 @@ export class RsocketRoomService {
     });
   }
 
+  /**
+   * Clears the previous connection state so a new connect attempt starts from a known baseline.
+   */
   private prepareConnectionAttempt(reconnectAttempt: boolean): void {
     this.clearReconnectTimer();
     this.cancelPendingConnect();
@@ -204,6 +237,9 @@ export class RsocketRoomService {
     this.transitionTo(reconnectAttempt ? 'RECONNECTING' : 'CONNECTING');
   }
 
+  /**
+   * Marks a broker connection as active and starts the room stream immediately.
+   */
   private activateBrokerConnection(brokerUrl: string, socket: BrokerSocket): void {
     this.clearReconnectTimer();
     this.brokerState = { url: brokerUrl, socket };
@@ -214,6 +250,9 @@ export class RsocketRoomService {
     this.publish('ROOM_JOINED', { capabilities: [...RsocketRoomService.JOIN_CAPABILITIES] });
   }
 
+  /**
+   * Retries a single broker URL for the transient failures that are known to happen during browser connect/setup.
+   */
   private async connectBrokerUrlWithRetry(url: string, retryOnTransientFailure: boolean): Promise<BrokerSocket> {
     const maxAttempts = retryOnTransientFailure
       ? Math.max(
@@ -237,6 +276,9 @@ export class RsocketRoomService {
     throw latestError || new Error('Verbinding met broker mislukt.');
   }
 
+  /**
+   * Only retry failures that are likely transient in practice. Other errors should fail fast.
+   */
   private canRetryConnection(error: Error, attempt: number): boolean {
     const timeoutError = this.isTimeoutError(error);
     const closedError = this.isConnectionClosedError(error);
@@ -245,6 +287,9 @@ export class RsocketRoomService {
       || (closedError && attempt < RsocketRoomService.CONNECT_CLOSED_RETRIES_SINGLE_URL);
   }
 
+  /**
+   * Subscribes to the broker room stream and guards callbacks with the current stream token.
+   */
   private subscribeToRoomEvents(socket: BrokerSocket): void {
     if (!this.identity || !socket.requestStream) {
       return;
@@ -283,6 +328,9 @@ export class RsocketRoomService {
     });
   }
 
+  /**
+   * Handles broker stream loss for the active subscription and schedules a reconnect when allowed.
+   */
   private handleStreamInterruption(socket: BrokerSocket, streamToken: number, error?: unknown): void {
     if (!this.isActiveStream(socket, streamToken)) {
       return;
@@ -301,6 +349,10 @@ export class RsocketRoomService {
     this.scheduleReconnect();
   }
 
+  /**
+   * Wraps the underlying RSocket connect call with an explicit timeout because browser websocket
+   * failures can otherwise hang for too long before surfacing to the UI.
+   */
   private createConnectionWithTimeout(url: string): Promise<BrokerSocket> {
     return new Promise((resolve, reject) => {
       let timedOut = false;
@@ -332,6 +384,9 @@ export class RsocketRoomService {
     });
   }
 
+  /**
+   * Creates a single RSocket-over-WebSocket connection.
+   */
   private createConnection(url: string): Promise<BrokerSocket> {
     return new Promise((resolve, reject) => {
       const client = new RSocketClient({
@@ -348,8 +403,27 @@ export class RsocketRoomService {
         transport: new RSocketWebSocketClient({
           url,
           wsCreator: (connectionUrl: string) => {
-            const websocket = new WebSocket(connectionUrl);
+            const websocket = new WebSocket(connectionUrl, ['rsocket']);
             websocket.binaryType = 'arraybuffer';
+            const nativeSend = websocket.send.bind(websocket);
+            websocket.send = ((data: string | ArrayBufferLike | Blob | ArrayBufferView) => {
+              if (ArrayBuffer.isView(data)) {
+                // Safari is stricter than Chromium about reused/shared backing buffers during the
+                // first setup frames. Copy the bytes into a fresh ArrayBuffer before sending.
+                const view = data as ArrayBufferView;
+                const copy = new Uint8Array(view.byteLength);
+                copy.set(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
+                nativeSend(copy.buffer);
+                return;
+              }
+
+              if (data instanceof ArrayBuffer) {
+                nativeSend(data.slice(0));
+                return;
+              }
+
+              nativeSend(data as string | ArrayBufferLike | Blob);
+            }) as typeof websocket.send;
             return websocket;
           }
         }, BufferEncoders)
@@ -374,6 +448,9 @@ export class RsocketRoomService {
     });
   }
 
+  /**
+   * Aborts an in-flight connect attempt when the UI disconnects or the timeout fires first.
+   */
   private cancelPendingConnect(): void {
     if (!this.pendingConnectCancel) {
       return;
@@ -388,6 +465,9 @@ export class RsocketRoomService {
     }
   }
 
+  /**
+   * Schedules a reconnect attempt if reconnects are enabled and no attempt is already queued.
+   */
   private scheduleReconnect(): void {
     if (!this.canReconnect()) {
       return;
@@ -425,6 +505,9 @@ export class RsocketRoomService {
     }
   }
 
+  /**
+   * Normalizes, resolves, and de-duplicates the broker URL list provided by the UI.
+   */
   private normalizeBrokerUrls(brokerUrls: string[]): string[] {
     const normalized = brokerUrls
       .map((brokerUrl) => brokerUrl.trim())
@@ -435,6 +518,9 @@ export class RsocketRoomService {
     return normalized.filter((brokerUrl, index, all) => all.indexOf(brokerUrl) === index);
   }
 
+  /**
+   * Resolves same-origin websocket paths such as "/rsocket" into full ws/wss URLs.
+   */
   private resolveBrokerUrl(brokerUrl: string): string | null {
     if (typeof window !== 'undefined' && brokerUrl.startsWith('/')) {
       const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -481,6 +567,9 @@ export class RsocketRoomService {
     return [preferred, ...others];
   }
 
+  /**
+   * Creates the room stream subscription payload expected by the broker.
+   */
   private createStreamRequest(clientId: string): BrokerRequest {
     const payload: StreamSubscriptionRequest = {
       action: 'SUBSCRIBE_ROOM',
@@ -492,6 +581,9 @@ export class RsocketRoomService {
     return this.createRouteRequest(RsocketRoomService.ROUTES.stream, payload);
   }
 
+  /**
+   * Creates the publish payload expected by the broker.
+   */
   private createEventRequest<TType extends RoomEventType>(event: RoomEvent<TType>): BrokerRequest {
     const payload: RoomEventRequest<TType> = {
       action: 'ROOM_EVENT',

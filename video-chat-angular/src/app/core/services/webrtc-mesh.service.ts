@@ -19,7 +19,16 @@ interface PeerState {
 @Injectable({
   providedIn: 'root'
 })
+/**
+ * Manages peer-to-peer media exchange between room participants.
+ *
+ * The broker distributes signaling messages, but all actual media tracks flow through RTCPeerConnection
+ * instances owned here.
+ */
 export class WebrtcMeshService {
+  /**
+   * Public STUN fallback so peers can gather candidates in simple LAN/NAT setups without extra config.
+   */
   private static readonly DEFAULT_STUN_SERVERS = ['stun:stun.l.google.com:19302'];
 
   private identity: ClientIdentity | null = null;
@@ -32,6 +41,9 @@ export class WebrtcMeshService {
   private remoteFeedRemover: ((ownerId: string, trackId: string) => void) | null = null;
   private remoteOwnerCleaner: ((ownerId: string) => void) | null = null;
 
+  /**
+   * Wires transport-agnostic callbacks into the service. The service itself stays free of Angular state.
+   */
   initialize(
     identity: ClientIdentity,
     signalPublisher: (payload: WebrtcSignalPayload) => void,
@@ -46,6 +58,10 @@ export class WebrtcMeshService {
     this.remoteOwnerCleaner = remoteOwnerCleaner;
   }
 
+  /**
+   * Ensures a peer connection exists when another participant joins and requests an offer when local
+   * cameras already exist.
+   */
   async onPeerJoined(remoteClientId: string, remoteName: string): Promise<void> {
     if (!this.identity || remoteClientId === this.identity.clientId) {
       return;
@@ -59,6 +75,9 @@ export class WebrtcMeshService {
     }
   }
 
+  /**
+   * Tears down peer state and removes any rendered remote tiles for a departed participant.
+   */
   onPeerLeft(remoteClientId: string): void {
     const peer = this.peers.get(remoteClientId);
     if (peer) {
@@ -73,6 +92,9 @@ export class WebrtcMeshService {
     this.peerNames.delete(remoteClientId);
   }
 
+  /**
+   * Adds a newly published local camera to every active peer connection and triggers renegotiation.
+   */
   addLocalFeed(feedId: string, label: string, stream: MediaStream): void {
     this.localFeeds.set(feedId, { feedId, label, stream });
 
@@ -82,6 +104,9 @@ export class WebrtcMeshService {
     });
   }
 
+  /**
+   * Removes a local camera from all peers and renegotiates so the remote side drops the track cleanly.
+   */
   removeLocalFeed(feedId: string): void {
     const feed = this.localFeeds.get(feedId);
     if (!feed) {
@@ -96,6 +121,9 @@ export class WebrtcMeshService {
     this.localFeeds.delete(feedId);
   }
 
+  /**
+   * Applies an incoming signaling message using the "perfect negotiation" pattern.
+   */
   async handleSignal(fromClientId: string, fromName: string, payload: WebrtcSignalPayload): Promise<void> {
     if (!this.identity || payload.targetClientId !== this.identity.clientId) {
       return;
@@ -153,6 +181,9 @@ export class WebrtcMeshService {
     }
   }
 
+  /**
+   * Closes all peer connections and clears in-memory state when the room session ends.
+   */
   dispose(): void {
     this.peers.forEach((peer) => {
       peer.pc.close();
@@ -167,6 +198,9 @@ export class WebrtcMeshService {
     this.remoteOwnerCleaner = null;
   }
 
+  /**
+   * Creates or returns a peer connection for a remote participant and wires all browser callbacks.
+   */
   private ensurePeer(remoteClientId: string): PeerState {
     const existing = this.peers.get(remoteClientId);
     if (existing) {
@@ -199,6 +233,8 @@ export class WebrtcMeshService {
         return;
       }
 
+      // Browsers can fire ontrack before the track becomes unmuted, so reuse the same publish step
+      // on both callbacks to avoid missing a remote tile on slower negotiations.
       const publishRemoteFeed = () => this.publishRemoteTrack(remoteClientId, event.track);
 
       publishRemoteFeed();
@@ -229,6 +265,9 @@ export class WebrtcMeshService {
     return peerState;
   }
 
+  /**
+   * Marks that a peer needs renegotiation. Actual offer creation is serialized in flushQueuedOffer.
+   */
   private requestOffer(remoteClientId: string): void {
     const peer = this.ensurePeer(remoteClientId);
     peer.needsOffer = true;
@@ -237,6 +276,9 @@ export class WebrtcMeshService {
     });
   }
 
+  /**
+   * Prevents overlapping offers by serializing renegotiation attempts per peer.
+   */
   private async flushQueuedOffer(remoteClientId: string): Promise<void> {
     const peer = this.ensurePeer(remoteClientId);
     if (!peer.needsOffer || peer.makingOffer || peer.pc.signalingState !== 'stable') {
@@ -263,6 +305,9 @@ export class WebrtcMeshService {
     }
   }
 
+  /**
+   * Creates and publishes a local SDP offer when the connection is in a stable state.
+   */
   private async makeOffer(remoteClientId: string): Promise<void> {
     const peer = this.ensurePeer(remoteClientId);
     if (peer.makingOffer || peer.pc.signalingState !== 'stable') {
@@ -281,6 +326,9 @@ export class WebrtcMeshService {
     }
   }
 
+  /**
+   * Emits a signaling message back through the broker-facing callback.
+   */
   private publishSignal(targetClientId: string, signal: WebrtcSignalPayload['signal']): void {
     if (!this.signalPublisher) {
       return;
@@ -292,6 +340,9 @@ export class WebrtcMeshService {
     });
   }
 
+  /**
+   * Tie-breaker for perfect negotiation. Only one side should ignore colliding offers.
+   */
   private isPolite(remoteClientId: string): boolean {
     if (!this.identity) {
       return true;
@@ -300,12 +351,18 @@ export class WebrtcMeshService {
     return this.identity.clientId.localeCompare(remoteClientId) > 0;
   }
 
+  /**
+   * Adds all tracks of a local stream to a peer connection.
+   */
   private addStreamToPeer(pc: RTCPeerConnection, stream: MediaStream): void {
     stream.getTracks().forEach((track) => {
       pc.addTrack(track, stream);
     });
   }
 
+  /**
+   * Removes only the senders belonging to a specific local stream.
+   */
   private removeStreamFromPeer(pc: RTCPeerConnection, stream: MediaStream): void {
     const streamTracks = new Set(stream.getTracks());
     pc.getSenders().forEach((sender) => {
@@ -315,6 +372,9 @@ export class WebrtcMeshService {
     });
   }
 
+  /**
+   * Converts a browser track callback into the UI feed shape consumed by RoomSessionService.
+   */
   private publishRemoteTrack(remoteClientId: string, track: MediaStreamTrack): void {
     if (!this.remoteFeedUpserter) {
       return;

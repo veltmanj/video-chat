@@ -19,8 +19,28 @@ describe('LiveRoomComponent', () => {
   let roomSessionService: MockedObject<RoomSessionService>;
   let rsocketRoomService: MockedObject<RsocketRoomService>;
   let webrtcMeshService: MockedObject<WebrtcMeshService>;
+  let originalMediaDevices: MediaDevices | undefined;
+  let registeredDeviceChangeListener: (() => void) | null;
 
   beforeEach(async () => {
+    originalMediaDevices = navigator.mediaDevices;
+    registeredDeviceChangeListener = null;
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        addEventListener: vi.fn((eventName: string, listener: () => void) => {
+          if (eventName === 'devicechange') {
+            registeredDeviceChangeListener = listener;
+          }
+        }),
+        removeEventListener: vi.fn((eventName: string, listener: () => void) => {
+          if (eventName === 'devicechange' && registeredDeviceChangeListener === listener) {
+            registeredDeviceChangeListener = null;
+          }
+        })
+      }
+    });
+
     stateSubject = new BehaviorSubject<ConnectionState>('DISCONNECTED');
     roomEventsSubject = new Subject<RoomEvent>();
 
@@ -85,6 +105,13 @@ describe('LiveRoomComponent', () => {
     component = fixture.componentInstance;
     fixture.detectChanges();
     await fixture.whenStable();
+  });
+
+  afterEach(() => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: originalMediaDevices
+    });
   });
 
   it('connects room and initializes webrtc mesh', async () => {
@@ -156,6 +183,18 @@ describe('LiveRoomComponent', () => {
     await fixture.whenStable();
 
     expect(webrtcMeshService.onPeerJoined).toHaveBeenCalledWith('client-remote-1', 'Remote 1');
+  });
+
+  it('refreshes devices automatically on media device change', async () => {
+    expect(mediaDeviceService.listVideoInputs).toHaveBeenCalledTimes(1);
+    expect(registeredDeviceChangeListener).not.toBeNull();
+
+    mediaDeviceService.listVideoInputs.mockResolvedValue([{ deviceId: 'cam-2', label: 'Camera 2' }]);
+    registeredDeviceChangeListener!();
+    await fixture.whenStable();
+
+    expect(mediaDeviceService.listVideoInputs).toHaveBeenCalledTimes(2);
+    expect(component.devices).toEqual([{ deviceId: 'cam-2', label: 'Camera 2' }]);
   });
 
   it('sends chat with publish and appends the local message immediately', async () => {

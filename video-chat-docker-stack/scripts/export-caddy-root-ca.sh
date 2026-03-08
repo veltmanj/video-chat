@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Exports the current Caddy local root CA so client devices can trust HTTPS and WSS traffic.
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 OUTPUT_FILE="${ROOT_DIR}/${CADDY_LOCAL_CA_FILENAME:-caddy-local-root-ca.crt}"

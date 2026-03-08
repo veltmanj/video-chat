@@ -7,6 +7,12 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 
 @SpringBootApplication(proxyBeanMethods = false)
+/**
+ * Entry point for the backoffice service.
+ *
+ * <p>The service keeps a lightweight in-memory view of room activity that can be queried over HTTP
+ * for operational dashboards or troubleshooting.
+ */
 public class VideoChatBackofficeApplication {
 
     public static void main(String[] args) {
@@ -14,6 +20,9 @@ public class VideoChatBackofficeApplication {
     }
 
     @Bean
+    /**
+     * Exposes a shared UTC clock so timestamp normalization stays deterministic and testable.
+     */
     Clock applicationClock() {
         return Clock.systemUTC();
     }

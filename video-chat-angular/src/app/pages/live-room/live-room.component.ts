@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, NgZone, OnDestroy, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { environment } from '../../../environments/environment';
@@ -27,6 +27,9 @@ import { WebrtcMeshService } from '../../core/services/webrtc-mesh.service';
   standalone: true,
   imports: [CommonModule, FormsModule, CameraGridComponent, ChatPanelComponent]
 })
+/**
+ * Main room page that orchestrates device management, broker connectivity, WebRTC setup, and UI state.
+ */
 export class LiveRoomComponent implements OnInit, OnDestroy {
   private static readonly DEFAULT_ROOM_ID = 'main-stage';
   private static readonly DEFAULT_DISPLAY_NAME_PREFIX = 'Host';
@@ -48,6 +51,14 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
 
   private currentIdentity: ClientIdentity | null = null;
   private readonly destroyRef = inject(DestroyRef);
+  private readonly ngZone = inject(NgZone);
+  /**
+   * Browser media device callbacks can arrive outside Angular change detection, so always re-enter
+   * the zone before updating component state.
+   */
+  private readonly deviceChangeListener = () => {
+    void this.ngZone.run(() => this.refreshDevices());
+  };
 
   constructor(
     private mediaDeviceService: MediaDeviceService,
@@ -58,45 +69,65 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     this.roomId = LiveRoomComponent.DEFAULT_ROOM_ID;
   }
 
+  /**
+   * Template convenience flag for connection-sensitive UI actions.
+   */
   get connected(): boolean {
     return this.connectionState === 'CONNECTED';
   }
 
+  /**
+   * Wires the component to the session/broker observables and starts local device discovery.
+   */
   ngOnInit(): void {
     this.roomSessionService.feeds$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((feeds: CameraFeed[]) => {
-        this.feeds = feeds;
+        this.ngZone.run(() => {
+          this.feeds = feeds;
+        });
       });
 
     this.roomSessionService.messages$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((messages: ChatMessage[]) => {
-        this.messages = messages;
+        this.ngZone.run(() => {
+          this.messages = messages;
+        });
       });
 
     this.rsocketRoomService.state$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((state: ConnectionState) => {
-        this.connectionState = state;
-        this.applyConnectionState(state);
+        this.ngZone.run(() => {
+          this.connectionState = state;
+          this.applyConnectionState(state);
+        });
       });
 
     this.rsocketRoomService.roomEvents$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((event: RoomEvent) => {
-        this.handleRoomEvent(event);
+        void this.ngZone.run(() => this.handleRoomEvent(event));
       });
 
+    this.registerDeviceChangeListener();
     this.refreshDevices();
   }
 
+  /**
+   * Releases browser resources and broker connections when the page is destroyed.
+   */
   ngOnDestroy(): void {
+    this.unregisterDeviceChangeListener();
     this.stopAllLocalStreams();
     this.webrtcMeshService.dispose();
     this.rsocketRoomService.disconnect();
   }
 
+  /**
+   * Creates a room identity, connects to a broker endpoint, and prepares WebRTC callbacks.
+   */
   async connectRoom(): Promise<void> {
     this.clearStatus();
     this.isConnecting = true;
@@ -129,6 +160,9 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Disconnects from the room and clears all local session state.
+   */
   disconnectRoom(): void {
     this.stopAllLocalStreams();
     this.webrtcMeshService.dispose();
@@ -138,6 +172,9 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     this.uiInfo = 'Verbinding verbroken.';
   }
 
+  /**
+   * Refreshes the locally available camera list and keeps the current selection valid when possible.
+   */
   async refreshDevices(): Promise<void> {
     this.clearStatus();
     try {
@@ -158,6 +195,9 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Starts the selected camera locally, publishes it to the session, and informs the broker.
+   */
   async addCamera(): Promise<void> {
     this.clearStatus();
 
@@ -202,10 +242,16 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Used by the template to keep the add-camera action disabled while preconditions are missing.
+   */
   canAddCamera(): boolean {
     return this.connected && !this.isAddingCamera && !!this.getSelectedDevice();
   }
 
+  /**
+   * Builds the candidate broker URL list. Same-origin "/rsocket" is preferred on HTTPS deployments.
+   */
   private buildBrokerUrls(): string[] {
     const fromInput = this.brokerEndpoints
       .split(/[,\n]/)
@@ -217,6 +263,9 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     return merged.filter((url: string, idx: number, all: string[]) => all.indexOf(url) === idx);
   }
 
+  /**
+   * Prefer the reverse-proxied websocket when the app itself is loaded from a deployed origin.
+   */
   private shouldPreferSameOriginProxy(): boolean {
     if (typeof window === 'undefined') {
       return false;
@@ -230,6 +279,9 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
       && window.location.hostname !== '127.0.0.1';
   }
 
+  /**
+   * Converts any thrown value into a UI-friendly error string.
+   */
   private extractErrorMessage(error: unknown): string {
     if (!error) {
       return 'onbekende fout';
@@ -250,6 +302,9 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Maps the select element value back to a stable CameraDevice object.
+   */
   private getSelectedDevice(): CameraDevice | null {
     if (!this.devices.length || !this.selectedDeviceSelection) {
       return null;
@@ -263,6 +318,9 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     return this.devices[selectedIndex];
   }
 
+  /**
+   * Removes a local feed from both the UI/session store and all peer connections.
+   */
   removeCamera(feedId: string): void {
     const removed = this.roomSessionService.removeFeed(feedId);
     if (!removed) {
@@ -278,6 +336,9 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     this.rsocketRoomService.publish('CAMERA_REMOVED', { feedId });
   }
 
+  /**
+   * Publishes a chat message locally and remotely.
+   */
   sendMessage(text: string): void {
     if (!this.currentIdentity || !this.connected) {
       this.setError('Niet verbonden met room. Bericht niet verzonden.');
@@ -294,6 +355,9 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     this.roomSessionService.appendMessage(this.createLocalChatMessage(trimmedText));
   }
 
+  /**
+   * Dispatches room events to the part of the client that owns the corresponding state.
+   */
   private async handleRoomEvent(event: RoomEvent): Promise<void> {
     if (!this.currentIdentity) {
       return;
@@ -327,6 +391,9 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     this.roomSessionService.consumeRoomEvent(event, this.currentIdentity.clientId);
   }
 
+  /**
+   * Centralizes connection-state UI text so transport changes do not scatter user messaging.
+   */
   private applyConnectionState(state: ConnectionState): void {
     const connectionStateMessages: Record<ConnectionState, { error: string; info: string }> = {
       CONNECTED: {
@@ -356,16 +423,25 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     this.uiInfo = status.info;
   }
 
+  /**
+   * Clears transient status messaging before a new user action starts.
+   */
   private clearStatus(): void {
     this.uiError = '';
     this.uiInfo = '';
   }
 
+  /**
+   * Sets a single error and clears any stale informational message.
+   */
   private setError(message: string): void {
     this.uiInfo = '';
     this.uiError = message;
   }
 
+  /**
+   * Creates the client identity used for broker and WebRTC signaling.
+   */
   private createIdentity(): ClientIdentity {
     return {
       clientId: this.roomSessionService.createId('client'),
@@ -373,24 +449,63 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     };
   }
 
+  /**
+   * Hooks WebRTC callbacks into the room-session service and broker publisher while ensuring Angular
+   * change detection sees the async browser callbacks.
+   */
   private initializeWebrtcMesh(identity: ClientIdentity): void {
     this.webrtcMeshService.initialize(
       identity,
       (payload: WebrtcSignalPayload) => {
-        this.rsocketRoomService.publish('WEBRTC_SIGNAL', payload);
+        this.ngZone.run(() => {
+          this.rsocketRoomService.publish('WEBRTC_SIGNAL', payload);
+        });
       },
       (remoteFeed: CameraFeed) => {
-        this.roomSessionService.upsertRemoteFeed(remoteFeed);
+        this.ngZone.run(() => {
+          this.roomSessionService.upsertRemoteFeed(remoteFeed);
+        });
       },
       (ownerId: string, trackId: string) => {
-        this.roomSessionService.removeRemoteTrackFeed(ownerId, trackId);
+        this.ngZone.run(() => {
+          this.roomSessionService.removeRemoteTrackFeed(ownerId, trackId);
+        });
       },
       (ownerId: string) => {
-        this.roomSessionService.removeRemoteFeedsByOwner(ownerId);
+        this.ngZone.run(() => {
+          this.roomSessionService.removeRemoteFeedsByOwner(ownerId);
+        });
       }
     );
   }
 
+  /**
+   * Registers browser device hot-plug notifications for automatic camera list refresh.
+   */
+  private registerDeviceChangeListener(): void {
+    const mediaDevices = typeof navigator !== 'undefined' ? navigator.mediaDevices : null;
+    if (!mediaDevices?.addEventListener) {
+      return;
+    }
+
+    mediaDevices.addEventListener('devicechange', this.deviceChangeListener);
+  }
+
+  /**
+   * Removes the devicechange listener added during initialization.
+   */
+  private unregisterDeviceChangeListener(): void {
+    const mediaDevices = typeof navigator !== 'undefined' ? navigator.mediaDevices : null;
+    if (!mediaDevices?.removeEventListener) {
+      return;
+    }
+
+    mediaDevices.removeEventListener('devicechange', this.deviceChangeListener);
+  }
+
+  /**
+   * Drops the selected-device index if the current device list no longer contains that position.
+   */
   private syncSelectedDeviceSelection(): void {
     if (!this.selectedDeviceSelection) {
       return;
@@ -406,6 +521,9 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Stops all local media tracks owned by the current page instance.
+   */
   private stopAllLocalStreams(): void {
     this.feeds.forEach((feed) => {
       if (feed.local && feed.stream) {
@@ -414,6 +532,9 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Normalizes a local camera stream into the feed model consumed by the UI and session store.
+   */
   private createLocalFeed(feedId: string, device: CameraDevice, stream: MediaStream): CameraFeed {
     return {
       id: feedId,
@@ -428,6 +549,9 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     };
   }
 
+  /**
+   * Payload shape sent to the broker after a local camera becomes available.
+   */
   private createCameraPublishedPayload(feedId: string, device: CameraDevice): CameraPublishedPayload {
     return {
       feedId,
@@ -436,6 +560,9 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     };
   }
 
+  /**
+   * Creates the optimistic local chat message rendered immediately after send.
+   */
   private createLocalChatMessage(text: string): ChatMessage {
     return {
       id: this.roomSessionService.createId('msg'),

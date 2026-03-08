@@ -5,10 +5,16 @@ package nl.nextend.videobroker.model;
  */
 public record RoomStreamRequest(String action, String route, String roomId, String clientId) {
 
+    /**
+     * Stream subscriptions are keyed by room id, so blank room ids are rejected up front.
+     */
     public boolean hasRoomId() {
         return roomId != null && !roomId.isBlank();
     }
 
+    /**
+     * Produces a log-safe label even when older clients do not send a client id yet.
+     */
     public String clientLabel() {
         return clientId == null || clientId.isBlank() ? "anonymous" : clientId;
     }

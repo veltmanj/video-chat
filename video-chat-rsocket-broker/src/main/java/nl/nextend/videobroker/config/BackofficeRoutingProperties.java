@@ -11,6 +11,9 @@ import java.util.List;
 @ConfigurationProperties(prefix = "broker.backoffice")
 public class BackofficeRoutingProperties {
 
+    /**
+     * Default backoffice route shared by broker and backoffice when no custom route is configured.
+     */
     private static final String DEFAULT_ROUTE = "backoffice.room.events.ingest";
 
     private boolean enabled;
@@ -41,6 +44,10 @@ public class BackofficeRoutingProperties {
         this.endpoints = endpoints == null ? new ArrayList<>() : new ArrayList<>(endpoints);
     }
 
+    /**
+     * Filters out partially configured endpoints so the forwarding service does not have to re-check
+     * empty URLs on every publish.
+     */
     public List<BackofficeEndpoint> usableEndpoints() {
         return endpoints.stream().filter(BackofficeEndpoint::hasUrl).toList();
     }
@@ -74,6 +81,9 @@ public class BackofficeRoutingProperties {
             return url != null && !url.isBlank();
         }
 
+        /**
+         * Prefer the configured name in logs so operators do not have to read raw URLs unless needed.
+         */
         public String displayName() {
             return name == null || name.isBlank() ? url : name;
         }

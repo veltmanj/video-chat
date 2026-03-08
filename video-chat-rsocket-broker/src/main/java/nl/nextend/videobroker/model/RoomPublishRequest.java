@@ -5,6 +5,9 @@ package nl.nextend.videobroker.model;
  */
 public record RoomPublishRequest(String action, String route, RoomEventMessage event) {
 
+    /**
+     * The broker accepts envelopes with optional action/route hints, but the event body itself is mandatory.
+     */
     public boolean hasEvent() {
         return event != null;
     }

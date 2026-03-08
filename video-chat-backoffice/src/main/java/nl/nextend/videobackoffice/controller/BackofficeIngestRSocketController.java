@@ -9,6 +9,9 @@ import org.springframework.stereotype.Controller;
 import reactor.core.publisher.Mono;
 
 @Controller
+/**
+ * RSocket ingress endpoint used by the broker to mirror room traffic into the backoffice service.
+ */
 public class BackofficeIngestRSocketController {
 
     private static final Logger log = LoggerFactory.getLogger(BackofficeIngestRSocketController.class);
@@ -20,6 +23,9 @@ public class BackofficeIngestRSocketController {
     }
 
     @MessageMapping("backoffice.room.events.ingest")
+    /**
+     * Stores a broker event and acknowledges the request once the event is visible to query endpoints.
+     */
     public Mono<Void> ingest(RoomEventMessage event) {
         eventIngestService.ingest(event);
 

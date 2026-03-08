@@ -18,6 +18,12 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
+/**
+ * Mirrors broker events to a backoffice service when forwarding is enabled.
+ *
+ * <p>The forwarding path is intentionally best-effort: broker fan-out to room subscribers remains the
+ * primary responsibility, while backoffice delivery failures are logged and retried on the next event.
+ */
 public class BackofficeForwardingService {
 
     private static final Logger log = LoggerFactory.getLogger(BackofficeForwardingService.class);
@@ -31,10 +37,16 @@ public class BackofficeForwardingService {
         this.requesterBuilder = requesterBuilder;
     }
 
+    /**
+     * Resolves a deterministic backoffice target for the room and sends the event there.
+     */
     public void forward(RoomEventMessage event) {
         resolveEndpoint(event).ifPresent(endpoint -> send(endpoint, event));
     }
 
+    /**
+     * Uses a stable hash on room id so all events for a room land on the same backoffice endpoint.
+     */
     private Optional<BackofficeEndpoint> resolveEndpoint(RoomEventMessage event) {
         if (!properties.isEnabled() || event == null || !event.hasRoomId()) {
             return Optional.empty();
@@ -49,6 +61,9 @@ public class BackofficeForwardingService {
         return Optional.of(endpoints.get(index));
     }
 
+    /**
+     * Reuses cached requesters per endpoint to avoid reconnecting on every forwarded event.
+     */
     private void send(BackofficeEndpoint endpoint, RoomEventMessage event) {
         try {
             RSocketRequester requester = requesterCache.computeIfAbsent(endpoint.getUrl(), this::createRequester);
@@ -73,10 +88,15 @@ public class BackofficeForwardingService {
     }
 
     private void handleSendFailure(BackofficeEndpoint endpoint, Throwable error) {
+        // Force a fresh requester on the next event because the cached connection may be stale.
         requesterCache.remove(endpoint.getUrl());
         log.warn("Failed to forward event to {} ({}): {}", endpoint.displayName(), endpoint.getUrl(), error.getMessage());
     }
 
+    /**
+     * Builds an RSocket requester for a configured endpoint URL. Invalid endpoints are logged once
+     * and skipped until configuration changes.
+     */
     private RSocketRequester createRequester(String endpointUrl) {
         try {
             URI uri = URI.create(endpointUrl);
@@ -91,6 +111,10 @@ public class BackofficeForwardingService {
         }
     }
 
+    /**
+     * Supports websocket and raw TCP transports because local deployments often use ws/wss while
+     * internal service-to-service paths may prefer TCP.
+     */
     private ClientTransport createTransport(URI uri) {
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
         return switch (scheme) {

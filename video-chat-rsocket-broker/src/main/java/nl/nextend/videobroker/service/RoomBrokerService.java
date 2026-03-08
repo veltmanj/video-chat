@@ -17,6 +17,9 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class RoomBrokerService {
 
+    /**
+     * Each room gets an independent hot sink so publishers and subscribers stay partitioned by room id.
+     */
     private final Map<String, Sinks.Many<RoomEventMessage>> roomChannels = new ConcurrentHashMap<>();
     private final BackofficeForwardingService forwardingService;
     private final Clock clock;
@@ -26,6 +29,9 @@ public class RoomBrokerService {
         this.clock = clock;
     }
 
+    /**
+     * Returns the live event stream for a room.
+     */
     public Flux<RoomEventMessage> subscribe(String roomId) {
         if (!hasText(roomId)) {
             return Flux.empty();
@@ -34,6 +40,9 @@ public class RoomBrokerService {
         return getOrCreateRoomSink(roomId).asFlux();
     }
 
+    /**
+     * Normalizes, emits, and optionally forwards an event. Invalid payloads are ignored cleanly.
+     */
     public Optional<RoomEventMessage> publish(RoomEventMessage event) {
         return normalize(event).map(normalizedEvent -> {
             emit(normalizedEvent);
@@ -42,6 +51,9 @@ public class RoomBrokerService {
         });
     }
 
+    /**
+     * Fills in broker-generated timestamps when clients omitted them and filters out unusable events.
+     */
     private Optional<RoomEventMessage> normalize(RoomEventMessage event) {
         if (event == null || !event.hasRoomId()) {
             return Optional.empty();
@@ -61,6 +73,8 @@ public class RoomBrokerService {
             return;
         }
 
+        // A multicast sink can become terminated after subscriber lifecycle issues. Replace it so
+        // later reconnects do not inherit the dead sink instance for that room.
         Sinks.Many<RoomEventMessage> freshSink = createRoomSink();
         roomChannels.put(event.roomId(), freshSink);
         freshSink.tryEmitNext(event);
