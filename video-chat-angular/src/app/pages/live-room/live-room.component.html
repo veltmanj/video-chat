@@ -18,13 +18,25 @@
       </label>
 
       <label>
+        Broker token (JWT)
+        <input
+          type="password"
+          name="accessToken"
+          [(ngModel)]="accessToken"
+          autocomplete="current-password"
+          maxlength="4096"
+          placeholder="Google ID token or provider JWT">
+      </label>
+
+      <label>
         Broker URL(s)
         <textarea
           name="brokerEndpoints"
           [(ngModel)]="brokerEndpoints"
           rows="2"
           autocomplete="off"
-          placeholder="wss://<host>/rsocket">
+          placeholder="wss://<host>/rsocket"
+          [disabled]="customBrokerUrlsLocked">
         </textarea>
       </label>
 

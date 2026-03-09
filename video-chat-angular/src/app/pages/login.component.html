@@ -1,0 +1,81 @@
+<main class="login-page">
+  <section class="hero-panel">
+    <p class="eyebrow">PulseRoom</p>
+    <h1>Continue to the control room.</h1>
+    <p class="lead">
+      Sign in with a trusted provider and continue directly into the live room.
+    </p>
+    <p class="hero-note">Google is available now. Additional providers can be added without changing the room flow.</p>
+  </section>
+
+  <section class="login-panel">
+    <div class="login-card">
+      <p class="card-kicker">Sign In</p>
+      <h2>Authenticate to Continue</h2>
+
+      <p class="error-banner" *ngIf="loginUnavailableMessage">{{ loginUnavailableMessage }}</p>
+      <p class="error-banner" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+      <button
+        type="button"
+        class="login-button login-button-primary"
+        (click)="login()"
+        [disabled]="!auth.hasGoogleClientId || isLoading">
+        <span class="provider-button-main">
+          <span class="provider-icon provider-icon-google" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path fill="#EA4335" d="M12 10.2v3.9h5.4c-.2 1.2-1.4 3.6-5.4 3.6-3.2 0-5.9-2.7-5.9-6s2.7-6 5.9-6c1.8 0 3 .8 3.7 1.5l2.5-2.4C16.6 3.2 14.5 2.3 12 2.3 6.8 2.3 2.6 6.5 2.6 11.7S6.8 21.1 12 21.1c6.9 0 9.1-4.8 9.1-7.3 0-.5-.1-.9-.1-1.3H12z"/>
+              <path fill="#34A853" d="M2.6 11.7c0 1.7.4 3.2 1.2 4.6l3.7-2.9c-.3-.6-.4-1.1-.4-1.7s.2-1.2.4-1.7L3.8 7.1C3 8.5 2.6 10 2.6 11.7z"/>
+              <path fill="#FBBC05" d="M12 21.1c2.5 0 4.6-.8 6.1-2.3l-3-2.3c-.8.6-1.8.9-3.1.9-2.5 0-4.6-1.7-5.4-4L2.9 16c1.6 3.1 4.8 5.1 9.1 5.1z"/>
+              <path fill="#4285F4" d="M21.1 13.8c0-.5-.1-.9-.1-1.3H12v3.9h5.4c-.3 1.3-1.1 2.3-2.2 3l3 2.3c1.8-1.6 2.9-4 2.9-6.9z"/>
+            </svg>
+          </span>
+          <span>Continue with Google</span>
+        </span>
+        <small *ngIf="isLoading">Redirecting</small>
+      </button>
+
+      <button
+        *ngFor="let provider of providerButtons"
+        type="button"
+        class="login-button login-button-secondary"
+        [disabled]="provider.disabled">
+        <span class="provider-button-main">
+          <span class="provider-icon" [class.provider-icon-apple]="provider.key === 'apple'" [class.provider-icon-x]="provider.key === 'x'" aria-hidden="true">
+            <svg *ngIf="provider.key === 'apple'" viewBox="0 0 24 24" focusable="false">
+              <path fill="currentColor" d="M16.7 12.5c0-2 1.7-3 1.7-3-.9-1.3-2.4-1.5-2.9-1.5-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.4 0-2.7.8-3.4 2-.7 1.2-.9 3 .1 4.8.7 1.3 1.6 2.7 2.8 2.7 1.1 0 1.5-.7 2.8-.7 1.3 0 1.7.7 2.9.7 1.2 0 1.9-1.1 2.6-2.4.9-1.5 1.2-3 1.2-3.1 0 0-2.2-.8-2.2-3.5zm-2-5.8c.6-.7 1-1.6.9-2.5-.8 0-1.8.5-2.4 1.1-.5.6-1 1.5-.9 2.4.9.1 1.8-.4 2.4-1z"/>
+            </svg>
+            <svg *ngIf="provider.key === 'x'" viewBox="0 0 24 24" focusable="false">
+              <path fill="currentColor" d="M18.9 3H21l-4.6 5.3L22 21h-4.4l-3.5-7.7L7.4 21H5.3l5-5.8L2 3h4.5l3.2 7 6.2-7zm-1.5 15.4h1.2L6 4.5H4.7l12.7 13.9z"/>
+            </svg>
+          </span>
+          <span>{{ provider.label }}</span>
+        </span>
+        <small>{{ provider.hint }}</small>
+      </button>
+
+      <div class="dev-panel" *ngIf="showDeveloperPanel">
+        <p class="dev-kicker">Development mode</p>
+        <p class="dev-copy">OAuth setup details are visible because the stack is running in development mode.</p>
+        <div class="status-callout" [class.status-error]="!auth.hasGoogleClientId">
+          <span class="status-label">Required origin</span>
+          <code>{{ currentOrigin }}</code>
+        </div>
+        <div class="config-card" *ngIf="!auth.hasGoogleClientId">
+          <h3>Missing Google client ID</h3>
+          <p>Set a real client ID and rebuild the frontend:</p>
+          <code>./scripts/configure-google-oauth.sh &lt;google-web-client-id&gt;</code>
+          <p>Google Console values:</p>
+          <ul>
+            <li>Authorized JavaScript origin: <code>{{ currentOrigin }}</code></li>
+            <li>Authorized redirect URI: <code>{{ currentOrigin }}</code></li>
+          </ul>
+        </div>
+      </div>
+
+      <p class="legal-note">
+        Google is a trademark of Google LLC. Apple and the Apple logo are trademarks of Apple Inc., registered in the U.S. and other countries. X and its logo are trademarks of X Corp. Provider marks are used only to identify sign-in methods and do not imply endorsement.
+      </p>
+    </div>
+  </section>
+</main>

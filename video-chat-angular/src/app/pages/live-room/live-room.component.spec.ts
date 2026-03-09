@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { type MockedObject, vi } from 'vitest';
 import { CameraFeed, ChatMessage, ConnectionState, RoomEvent } from '../../core/models/room.models';
+import { AuthService } from '../../core/services/auth.service';
 import { MediaDeviceService } from '../../core/services/media-device.service';
 import { RoomSessionService } from '../../core/services/room-session.service';
 import { RsocketRoomService } from '../../core/services/rsocket-room.service';
@@ -9,6 +10,11 @@ import { WebrtcMeshService } from '../../core/services/webrtc-mesh.service';
 import { LiveRoomComponent } from './live-room.component';
 
 describe('LiveRoomComponent', () => {
+  interface AuthServiceStub {
+    accessToken: string | null;
+    brokerToken: string | null;
+  }
+
   let fixture: ComponentFixture<LiveRoomComponent>;
   let component: LiveRoomComponent;
 
@@ -19,6 +25,7 @@ describe('LiveRoomComponent', () => {
   let roomSessionService: MockedObject<RoomSessionService>;
   let rsocketRoomService: MockedObject<RsocketRoomService>;
   let webrtcMeshService: MockedObject<WebrtcMeshService>;
+  let authService: AuthServiceStub;
   let originalMediaDevices: MediaDevices | undefined;
   let registeredDeviceChangeListener: (() => void) | null;
 
@@ -83,6 +90,11 @@ describe('LiveRoomComponent', () => {
       handleSignal: vi.fn()
     } as unknown as MockedObject<WebrtcMeshService>;
 
+    authService = {
+      accessToken: null,
+      brokerToken: null
+    };
+
     mediaDeviceService.listVideoInputs.mockResolvedValue([{ deviceId: 'cam-1', label: 'Camera 1' }]);
     mediaDeviceService.startCamera.mockResolvedValue({ id: 'stream-1', getTracks: () => [] } as any);
     rsocketRoomService.connect.mockResolvedValue(undefined);
@@ -94,6 +106,7 @@ describe('LiveRoomComponent', () => {
     await TestBed.configureTestingModule({
       imports: [LiveRoomComponent],
       providers: [
+        { provide: AuthService, useValue: authService },
         { provide: MediaDeviceService, useValue: mediaDeviceService },
         { provide: RoomSessionService, useValue: roomSessionService },
         { provide: RsocketRoomService, useValue: rsocketRoomService },
@@ -117,6 +130,7 @@ describe('LiveRoomComponent', () => {
   it('connects room and initializes webrtc mesh', async () => {
     component.roomId = 'room-x';
     component.displayName = 'Alice';
+    component.accessToken = 'broker-token';
     component.brokerEndpoints = 'ws://localhost:9898/rsocket, ws://localhost:9899/rsocket';
     vi.spyOn(component as any, 'shouldPreferSameOriginProxy').mockReturnValue(true);
 
@@ -125,8 +139,40 @@ describe('LiveRoomComponent', () => {
     expect(rsocketRoomService.connect).toHaveBeenCalled();
     const connectArgs = rsocketRoomService.connect.mock.calls.at(-1) as any[];
     const brokerUrls = connectArgs[2] as string[];
+    expect(connectArgs[3]).toBe('broker-token');
     expect(brokerUrls).toContain('/rsocket');
     expect(webrtcMeshService.initialize).toHaveBeenCalled();
+  });
+
+  it('blocks room connect when the broker token is missing', async () => {
+    component.accessToken = '   ';
+
+    await component.connectRoom();
+
+    expect(component.uiError).toContain('broker token');
+    expect(rsocketRoomService.connect).not.toHaveBeenCalled();
+  });
+
+  it('uses the auth-service broker token when no manual token is entered', async () => {
+    authService.brokerToken = 'google-id-token';
+    component.accessToken = '   ';
+
+    await component.connectRoom();
+
+    const connectArgs = rsocketRoomService.connect.mock.calls.at(-1) as any[];
+    expect(connectArgs[3]).toBe('google-id-token');
+    expect(component.accessToken).toBe('google-id-token');
+  });
+
+  it('prefers the auth-service broker token over a stale stored token', async () => {
+    authService.brokerToken = 'fresh-google-id-token';
+    component.accessToken = 'stale-access-token';
+
+    await component.connectRoom();
+
+    const connectArgs = rsocketRoomService.connect.mock.calls.at(-1) as any[];
+    expect(connectArgs[3]).toBe('fresh-google-id-token');
+    expect(component.accessToken).toBe('fresh-google-id-token');
   });
 
   it('shows connected state in the UI when state stream emits CONNECTED', () => {
@@ -149,6 +195,7 @@ describe('LiveRoomComponent', () => {
 
   it('adds and publishes selected camera when connected', async () => {
     component.selectedDeviceSelection = '0';
+    component.accessToken = 'broker-token';
     await component.connectRoom();
     stateSubject.next('CONNECTED');
 
@@ -165,6 +212,7 @@ describe('LiveRoomComponent', () => {
   });
 
   it('initiates webrtc peer join when receiving CAMERA_PUBLISHED from another client', async () => {
+    component.accessToken = 'broker-token';
     await component.connectRoom();
     stateSubject.next('CONNECTED');
 
@@ -198,6 +246,7 @@ describe('LiveRoomComponent', () => {
   });
 
   it('sends chat with publish and appends the local message immediately', async () => {
+    component.accessToken = 'broker-token';
     await component.connectRoom();
     stateSubject.next('CONNECTED');
 

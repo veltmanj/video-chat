@@ -15,6 +15,7 @@ import {
   RoomEvent,
   WebrtcSignalPayload
 } from '../../core/models/room.models';
+import { AuthService } from '../../core/services/auth.service';
 import { MediaDeviceService } from '../../core/services/media-device.service';
 import { RoomSessionService } from '../../core/services/room-session.service';
 import { RsocketRoomService } from '../../core/services/rsocket-room.service';
@@ -33,10 +34,12 @@ import { WebrtcMeshService } from '../../core/services/webrtc-mesh.service';
 export class LiveRoomComponent implements OnInit, OnDestroy {
   private static readonly DEFAULT_ROOM_ID = 'main-stage';
   private static readonly DEFAULT_DISPLAY_NAME_PREFIX = 'Host';
+  private static readonly ACCESS_TOKEN_STORAGE_KEY = 'pulse-room:broker-access-token';
 
   roomId = 'main-stage';
   displayName = `${LiveRoomComponent.DEFAULT_DISPLAY_NAME_PREFIX}-${Math.floor(Math.random() * 1000)}`;
   brokerEndpoints = environment.brokerWebsocketUrls.join(', ');
+  accessToken = this.readStoredAccessToken();
 
   devices: CameraDevice[] = [];
   selectedDeviceSelection = '';
@@ -61,6 +64,7 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
   };
 
   constructor(
+    private auth: AuthService,
     private mediaDeviceService: MediaDeviceService,
     private roomSessionService: RoomSessionService,
     private rsocketRoomService: RsocketRoomService,
@@ -76,10 +80,16 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     return this.connectionState === 'CONNECTED';
   }
 
+  get customBrokerUrlsLocked(): boolean {
+    return this.shouldPreferSameOriginProxy();
+  }
+
   /**
    * Wires the component to the session/broker observables and starts local device discovery.
    */
   ngOnInit(): void {
+    this.prefillBrokerToken();
+
     this.roomSessionService.feeds$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((feeds: CameraFeed[]) => {
@@ -112,7 +122,7 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
       });
 
     this.registerDeviceChangeListener();
-    this.refreshDevices();
+    void this.refreshDevices();
   }
 
   /**
@@ -132,6 +142,13 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     this.clearStatus();
     this.isConnecting = true;
 
+    const authToken = this.resolveBrokerToken();
+    if (!authToken) {
+      this.setError('Vul een broker token in of log eerst in voordat je verbindt.');
+      this.isConnecting = false;
+      return;
+    }
+
     const brokerUrls = this.buildBrokerUrls();
     if (!brokerUrls.length) {
       this.setError('Vul minstens 1 broker URL in.');
@@ -142,7 +159,9 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     const identity = this.createIdentity();
 
     try {
-      await this.rsocketRoomService.connect(identity, this.roomId.trim(), brokerUrls);
+      await this.rsocketRoomService.connect(identity, this.roomId.trim(), brokerUrls, authToken);
+      this.accessToken = authToken;
+      this.storeAccessToken(authToken);
       this.currentIdentity = identity;
       this.initializeWebrtcMesh(identity);
     } catch (error) {
@@ -150,6 +169,8 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
       const message = this.extractErrorMessage(error);
       if (message.includes('SecurityError') || message.includes('insecure')) {
         this.setError('Connectie geblokkeerd door browser security. Gebruik op HTTPS alleen wss:// of /rsocket.');
+      } else if (message.toLowerCase().includes('unauthorized') || message.toLowerCase().includes('forbidden')) {
+        this.setError('Toegang geweigerd. Controleer het broker token of log opnieuw in voor een nieuw ID token.');
       } else if (message.includes('localhost') || message.includes('127.0.0.1')) {
         this.setError('Connectie naar localhost mislukt. Gebruik /rsocket of wss://<LAN-IP>/rsocket.');
       } else {
@@ -218,9 +239,7 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
       const feedId = this.roomSessionService.createId('feed');
 
       this.roomSessionService.addLocalFeed(this.createLocalFeed(feedId, device, stream));
-
       this.webrtcMeshService.addLocalFeed(feedId, device.label, stream);
-
       this.rsocketRoomService.publish('CAMERA_PUBLISHED', this.createCameraPublishedPayload(feedId, device));
 
       await this.refreshDevices();
@@ -240,82 +259,6 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     } finally {
       this.isAddingCamera = false;
     }
-  }
-
-  /**
-   * Used by the template to keep the add-camera action disabled while preconditions are missing.
-   */
-  canAddCamera(): boolean {
-    return this.connected && !this.isAddingCamera && !!this.getSelectedDevice();
-  }
-
-  /**
-   * Builds the candidate broker URL list. Same-origin "/rsocket" is preferred on HTTPS deployments.
-   */
-  private buildBrokerUrls(): string[] {
-    const fromInput = this.brokerEndpoints
-      .split(/[,\n]/)
-      .map((url: string) => url.trim())
-      .filter((url: string) => !!url);
-
-    const preferred = this.shouldPreferSameOriginProxy() ? ['/rsocket'] : [];
-    const merged = [...preferred, ...fromInput];
-    return merged.filter((url: string, idx: number, all: string[]) => all.indexOf(url) === idx);
-  }
-
-  /**
-   * Prefer the reverse-proxied websocket when the app itself is loaded from a deployed origin.
-   */
-  private shouldPreferSameOriginProxy(): boolean {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-
-    if (window.location.protocol === 'https:') {
-      return true;
-    }
-
-    return window.location.hostname !== 'localhost'
-      && window.location.hostname !== '127.0.0.1';
-  }
-
-  /**
-   * Converts any thrown value into a UI-friendly error string.
-   */
-  private extractErrorMessage(error: unknown): string {
-    if (!error) {
-      return 'onbekende fout';
-    }
-
-    if (typeof error === 'string') {
-      return error;
-    }
-
-    if (typeof error === 'object' && 'message' in error && typeof (error as any).message === 'string') {
-      return (error as any).message;
-    }
-
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-
-  /**
-   * Maps the select element value back to a stable CameraDevice object.
-   */
-  private getSelectedDevice(): CameraDevice | null {
-    if (!this.devices.length || !this.selectedDeviceSelection) {
-      return null;
-    }
-
-    const selectedIndex = Number(this.selectedDeviceSelection);
-    if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= this.devices.length) {
-      return null;
-    }
-
-    return this.devices[selectedIndex];
   }
 
   /**
@@ -351,8 +294,129 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     }
 
     this.rsocketRoomService.publish('CHAT_MESSAGE', { text: trimmedText });
-
     this.roomSessionService.appendMessage(this.createLocalChatMessage(trimmedText));
+  }
+
+  /**
+   * Used by the template to keep the add-camera action disabled while preconditions are missing.
+   */
+  canAddCamera(): boolean {
+    return this.connected && !this.isAddingCamera && !!this.getSelectedDevice();
+  }
+
+  /**
+   * Builds the candidate broker URL list. Same-origin "/rsocket" is preferred on HTTPS deployments.
+   */
+  private buildBrokerUrls(): string[] {
+    if (this.customBrokerUrlsLocked) {
+      return ['/rsocket'];
+    }
+
+    const fromInput = this.brokerEndpoints
+      .split(/[,\n]/)
+      .map((url: string) => url.trim())
+      .filter((url: string) => !!url);
+
+    const preferred = this.shouldPreferSameOriginProxy() ? ['/rsocket'] : [];
+    const merged = [...preferred, ...fromInput];
+    return merged.filter((url: string, idx: number, all: string[]) => all.indexOf(url) === idx);
+  }
+
+  /**
+   * Prefer the reverse-proxied websocket when the app itself is loaded from a deployed origin.
+   */
+  private shouldPreferSameOriginProxy(): boolean {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    if (window.location.protocol === 'https:') {
+      return true;
+    }
+
+    return window.location.hostname !== 'localhost'
+      && window.location.hostname !== '127.0.0.1';
+  }
+
+  private readStoredAccessToken(): string {
+    if (typeof window === 'undefined') {
+      return '';
+    }
+
+    return window.sessionStorage.getItem(LiveRoomComponent.ACCESS_TOKEN_STORAGE_KEY) ?? '';
+  }
+
+  private storeAccessToken(token: string): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.sessionStorage.setItem(LiveRoomComponent.ACCESS_TOKEN_STORAGE_KEY, token);
+  }
+
+  private prefillBrokerToken(): void {
+    const authBrokerToken = this.auth.brokerToken?.trim() ?? '';
+    if (!authBrokerToken) {
+      return;
+    }
+
+    this.accessToken = authBrokerToken;
+    this.storeAccessToken(authBrokerToken);
+  }
+
+  private resolveBrokerToken(): string {
+    const authBrokerToken = this.auth.brokerToken?.trim() ?? '';
+    if (authBrokerToken) {
+      this.accessToken = authBrokerToken;
+      this.storeAccessToken(authBrokerToken);
+      return authBrokerToken;
+    }
+
+    const manuallyProvidedToken = this.accessToken.trim();
+    if (manuallyProvidedToken) {
+      return manuallyProvidedToken;
+    }
+
+    return '';
+  }
+
+  /**
+   * Converts any thrown value into a UI-friendly error string.
+   */
+  private extractErrorMessage(error: unknown): string {
+    if (!error) {
+      return 'onbekende fout';
+    }
+
+    if (typeof error === 'string') {
+      return error;
+    }
+
+    if (typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+      return error.message;
+    }
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+
+  /**
+   * Maps the select element value back to a stable CameraDevice object.
+   */
+  private getSelectedDevice(): CameraDevice | null {
+    if (!this.devices.length || !this.selectedDeviceSelection) {
+      return null;
+    }
+
+    const selectedIndex = Number(this.selectedDeviceSelection);
+    if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= this.devices.length) {
+      return null;
+    }
+
+    return this.devices[selectedIndex];
   }
 
   /**

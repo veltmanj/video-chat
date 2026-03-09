@@ -62,12 +62,22 @@ interface StreamSubscriptionRequest {
   route: string;
   roomId: string;
   clientId: string;
+  authToken: string;
 }
 
 interface RoomEventRequest<TType extends RoomEventType> {
   action: 'ROOM_EVENT';
   route: string;
+  authToken: string;
   event: RoomEvent<TType>;
+}
+
+interface BrokerAuthorizationRequest {
+  action: 'AUTHORIZE_ROOM';
+  route: string;
+  roomId: string;
+  clientId: string;
+  authToken: string;
 }
 
 interface RoomEventEnvelope {
@@ -88,6 +98,7 @@ interface RoomEventEnvelope {
  */
 export class RsocketRoomService {
   private static readonly ROUTES = {
+    authorize: 'room.events.authorize',
     publish: 'room.events.publish',
     stream: 'room.events.stream'
   } as const;
@@ -105,6 +116,7 @@ export class RsocketRoomService {
   private brokerState: BrokerState | null = null;
   private currentRoomId = '';
   private identity: ClientIdentity | null = null;
+  private authToken = '';
   /**
    * Last normalized broker URL list supplied by the UI. Reconnects reuse this exact ordered list.
    */
@@ -133,10 +145,12 @@ export class RsocketRoomService {
     identity: ClientIdentity,
     roomId: string,
     brokerUrls: string[],
+    authToken: string,
     reconnectAttempt = false
   ): Promise<void> {
     this.identity = identity;
     this.currentRoomId = roomId;
+    this.authToken = authToken.trim();
     this.reconnectEnabled = true;
     this.reconnecting = false;
     this.brokerUrls = this.prioritizePreferredBrokerUrl(this.normalizeBrokerUrls(brokerUrls));
@@ -154,6 +168,7 @@ export class RsocketRoomService {
     for (const brokerUrl of this.brokerUrls) {
       try {
         const socket = await this.connectBrokerUrlWithRetry(brokerUrl, retrySingleUrl);
+        await this.authorizeConnection(socket, identity.clientId);
         this.activateBrokerConnection(brokerUrl, socket);
         return;
       } catch (error) {
@@ -180,6 +195,7 @@ export class RsocketRoomService {
 
     this.closeSocket();
     this.currentRoomId = '';
+    this.authToken = '';
     this.preferredBrokerUrl = null;
     this.transitionTo('DISCONNECTED');
   }
@@ -342,6 +358,13 @@ export class RsocketRoomService {
     }
 
     if (error) {
+      if (this.isAuthorizationError(error)) {
+        console.warn('RSocket autorisatie geweigerd', error);
+        this.reconnectEnabled = false;
+        this.transitionTo('FAILED');
+        return;
+      }
+
       console.warn('RSocket stream error, reconnecting', error);
     }
 
@@ -449,6 +472,37 @@ export class RsocketRoomService {
   }
 
   /**
+   * Fails fast when the supplied operator token is not accepted by the broker.
+   */
+  private authorizeConnection(socket: BrokerSocket, clientId: string): Promise<void> {
+    if (!socket.requestResponse) {
+      return Promise.reject(new Error('Broker ondersteunt geen autorisatieverzoek.'));
+    }
+
+    const payload: BrokerAuthorizationRequest = {
+      action: 'AUTHORIZE_ROOM',
+      route: RsocketRoomService.ROUTES.authorize,
+      roomId: this.currentRoomId,
+      clientId,
+      authToken: this.authToken
+    };
+
+    return new Promise((resolve, reject) => {
+      socket.requestResponse!(this.createRouteRequest(RsocketRoomService.ROUTES.authorize, payload)).subscribe({
+        onComplete: () => {
+          resolve();
+        },
+        onError: (error: unknown) => {
+          reject(error);
+        },
+        onSubscribe: () => {
+          return;
+        }
+      });
+    });
+  }
+
+  /**
    * Aborts an in-flight connect attempt when the UI disconnects or the timeout fires first.
    */
   private cancelPendingConnect(): void {
@@ -481,7 +535,7 @@ export class RsocketRoomService {
       }
 
       try {
-        await this.connect(this.identity, this.currentRoomId, this.brokerUrls, true);
+        await this.connect(this.identity, this.currentRoomId, this.brokerUrls, this.authToken, true);
       } catch (error) {
         console.error('Reconnect mislukt', error);
         this.reconnecting = false;
@@ -552,6 +606,11 @@ export class RsocketRoomService {
       .toLowerCase();
   }
 
+  private isAuthorizationError(error: unknown): boolean {
+    const message = this.errorMessage(error);
+    return message.includes('unauthorized') || message.includes('forbidden') || message.includes('access denied');
+  }
+
   private prioritizePreferredBrokerUrl(brokerUrls: string[]): string[] {
     if (!this.preferredBrokerUrl) {
       return brokerUrls;
@@ -575,7 +634,8 @@ export class RsocketRoomService {
       action: 'SUBSCRIBE_ROOM',
       route: RsocketRoomService.ROUTES.stream,
       roomId: this.currentRoomId,
-      clientId
+      clientId,
+      authToken: this.authToken
     };
 
     return this.createRouteRequest(RsocketRoomService.ROUTES.stream, payload);
@@ -588,6 +648,7 @@ export class RsocketRoomService {
     const payload: RoomEventRequest<TType> = {
       action: 'ROOM_EVENT',
       route: RsocketRoomService.ROUTES.publish,
+      authToken: this.authToken,
       event
     };
 
