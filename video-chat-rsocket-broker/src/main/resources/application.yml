@@ -11,6 +11,14 @@ spring:
       mapping-path: ${BROKER_RSOCKET_MAPPING_PATH:/rsocket}
 
 broker:
+  jwt:
+    enabled: ${BROKER_JWT_ENABLED:false}
+    cache-ttl: ${BROKER_JWT_CACHE_TTL:15m}
+    vault:
+      uri: ${BROKER_JWT_VAULT_URI:http://localhost:8200}
+      token: ${BROKER_JWT_VAULT_TOKEN:}
+      kv-mount: ${BROKER_JWT_VAULT_KV_MOUNT:secret}
+      request-timeout: ${BROKER_JWT_VAULT_REQUEST_TIMEOUT:5s}
   backoffice:
     enabled: ${BROKER_BACKOFFICE_ENABLED:true}
     route: ${BROKER_BACKOFFICE_ROUTE:backoffice.room.events.ingest}

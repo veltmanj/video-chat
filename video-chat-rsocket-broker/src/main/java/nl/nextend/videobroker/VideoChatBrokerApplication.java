@@ -1,6 +1,7 @@
 package nl.nextend.videobroker;
 
 import nl.nextend.videobroker.config.BackofficeRoutingProperties;
+import nl.nextend.videobroker.config.BrokerJwtProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,7 +15,7 @@ import org.springframework.context.annotation.Bean;
 import java.time.Clock;
 
 @SpringBootApplication(proxyBeanMethods = false)
-@EnableConfigurationProperties(BackofficeRoutingProperties.class)
+@EnableConfigurationProperties({BackofficeRoutingProperties.class, BrokerJwtProperties.class})
 /**
  * Entry point for the room event broker.
  *

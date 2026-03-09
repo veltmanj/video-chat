@@ -3,6 +3,7 @@ package nl.nextend.videobroker.controller;
 import nl.nextend.videobroker.model.RoomEventMessage;
 import nl.nextend.videobroker.model.RoomPublishRequest;
 import nl.nextend.videobroker.model.RoomStreamRequest;
+import nl.nextend.videobroker.security.BrokerClientAuthService;
 import nl.nextend.videobroker.service.RoomBrokerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,9 +21,26 @@ public class RoomEventController {
     private static final Logger log = LoggerFactory.getLogger(RoomEventController.class);
 
     private final RoomBrokerService brokerService;
+    private final BrokerClientAuthService brokerClientAuthService;
 
-    public RoomEventController(RoomBrokerService brokerService) {
+    public RoomEventController(RoomBrokerService brokerService, BrokerClientAuthService brokerClientAuthService) {
         this.brokerService = brokerService;
+        this.brokerClientAuthService = brokerClientAuthService;
+    }
+
+    @MessageMapping("room.events.authorize")
+    /**
+     * Validates the supplied bearer token so clients fail before opening the live stream.
+     */
+    public Mono<Void> authorize(RoomStreamRequest request) {
+        if (request == null) {
+            log.warn("Authorize route invoked without a request payload");
+            return Mono.empty();
+        }
+
+        brokerClientAuthService.requireAuthorized(request.authToken());
+        log.info("Authorization accepted: roomId={}, clientId={}", request.roomId(), request.clientLabel());
+        return Mono.empty();
     }
 
     @MessageMapping("room.events.publish")
@@ -34,6 +52,8 @@ public class RoomEventController {
             log.warn("Publish route invoked without an event payload");
             return Mono.empty();
         }
+
+        brokerClientAuthService.requireAuthorized(request.authToken());
 
         brokerService.publish(request.event())
             .ifPresentOrElse(
@@ -53,6 +73,8 @@ public class RoomEventController {
             log.warn("Stream route invoked without a valid roomId");
             return Flux.empty();
         }
+
+        brokerClientAuthService.requireAuthorized(request.authToken());
 
         log.info("Stream subscribe: roomId={}, clientId={}", request.roomId(), request.clientLabel());
         return brokerService.subscribe(request.roomId())

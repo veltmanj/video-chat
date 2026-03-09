@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {
         "broker.backoffice.enabled=false",
+        "broker.jwt.enabled=false",
         "management.endpoints.web.exposure.include=health,info"
     }
 )
@@ -75,7 +76,8 @@ class BrokerRSocketIntegrationTest {
             "SUBSCRIBE_ROOM",
             "room.events.stream",
             "room-int-1",
-            "client-sub"
+            "client-sub",
+            "test-token"
         );
         RoomEventMessage event = new RoomEventMessage(
             "ROOM_JOINED",
@@ -88,6 +90,7 @@ class BrokerRSocketIntegrationTest {
         RoomPublishRequest publishRequest = new RoomPublishRequest(
             "ROOM_EVENT",
             "room.events.publish",
+            "test-token",
             event
         );
 

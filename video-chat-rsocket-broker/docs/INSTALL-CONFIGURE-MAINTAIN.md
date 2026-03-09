@@ -57,6 +57,11 @@ Primary settings:
 - `SERVER_ADDRESS`: bind address, default `0.0.0.0`
 - `SERVER_PORT`: server port, default `9898`
 - `BROKER_RSOCKET_MAPPING_PATH`: RSocket WebSocket path, default `/rsocket`
+- `BROKER_JWT_ENABLED`: enable JWT validation for authorize, publish, and stream requests, default `false`
+- `BROKER_JWT_CACHE_TTL`: how long JWKS documents stay cached after a Vault read, default `15m`
+- `BROKER_JWT_VAULT_URI`: Vault base URI, default `http://localhost:8200`
+- `BROKER_JWT_VAULT_TOKEN`: Vault token used for provider secret reads
+- `BROKER_JWT_VAULT_KV_MOUNT`: Vault KV-v2 mount, default `secret`
 - `BROKER_BACKOFFICE_ENABLED`: enable downstream forwarding, default `true`
 - `BROKER_BACKOFFICE_ROUTE`: forwarding route, default `backoffice.room.events.ingest`
 - `BROKER_BACKOFFICE_ENDPOINT`: default single backoffice endpoint, default `ws://localhost:7901/rsocket`
@@ -79,6 +84,17 @@ Example with multiple endpoints using `SPRING_APPLICATION_JSON`:
 ```bash
 SPRING_APPLICATION_JSON='{
   "broker": {
+    "jwt": {
+      "enabled": true,
+      "providers": [
+        {
+          "name": "google",
+          "issuers": ["https://accounts.google.com", "accounts.google.com"],
+          "vaultPath": "jwt/providers/google",
+          "vaultField": "jwks_json"
+        }
+      ]
+    },
     "backoffice": {
       "enabled": true,
       "route": "backoffice.room.events.ingest",
