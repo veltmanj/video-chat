@@ -39,3 +39,11 @@ npm start
 - Frontend: [video-chat-angular/README.md](video-chat-angular/README.md)
 - Broker: [video-chat-rsocket-broker/README.md](video-chat-rsocket-broker/README.md)
 - Backoffice: [video-chat-backoffice/README.md](video-chat-backoffice/README.md)
+
+## Legal
+
+- License selection and notes: [LICENSING.md](LICENSING.md)
+- License text: [LICENSE](LICENSE)
+- Terms of Service draft: [TERMS_OF_SERVICE.md](TERMS_OF_SERVICE.md)
+- Acceptable Use Policy draft: [ACCEPTABLE_USE_POLICY.md](ACCEPTABLE_USE_POLICY.md)
+- Cookie Policy draft: [COOKIE_POLICY.md](COOKIE_POLICY.md)
