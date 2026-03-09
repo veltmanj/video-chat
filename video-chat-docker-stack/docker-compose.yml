@@ -3,6 +3,10 @@ x-service-defaults: &service-defaults
   networks:
     - videochat
 
+x-job-defaults: &job-defaults
+  networks:
+    - videochat
+
 x-http-healthcheck: &http-healthcheck
   interval: 10s
   timeout: 5s
@@ -15,14 +19,100 @@ services:
     build:
       context: ../video-chat-angular
     container_name: ${FRONTEND_CONTAINER_NAME:-videochat-frontend}
+    environment:
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      VIDEOCHAT_APP_MODE: ${VIDEOCHAT_APP_MODE:-production}
+
+  vault:
+    <<: *service-defaults
+    image: ${VAULT_IMAGE:-hashicorp/vault:1.17}
+    container_name: ${VAULT_CONTAINER_NAME:-videochat-vault}
+    cap_add:
+      - IPC_LOCK
+    command: >
+      vault server
+      -dev
+      -dev-root-token-id=${VAULT_DEV_ROOT_TOKEN_ID:-videochat-dev-root-token}
+      -dev-listen-address=0.0.0.0:8200
+    ports:
+      - "${VAULT_HOST_PORT:-8200}:8200"
+    healthcheck:
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8200/v1/sys/health >/dev/null || exit 1"]
+
+  vault-init:
+    <<: *job-defaults
+    image: ${VAULT_IMAGE:-hashicorp/vault:1.17}
+    container_name: ${VAULT_INIT_CONTAINER_NAME:-videochat-vault-init}
+    depends_on:
+      vault:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["/bin/sh", "/vault/scripts/init-vault.sh"]
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: ${VAULT_DEV_ROOT_TOKEN_ID:-videochat-dev-root-token}
+      VAULT_KV_MOUNT: ${VAULT_KV_MOUNT:-secret}
+      VAULT_PROVIDER_FIELD: ${VAULT_PROVIDER_FIELD:-jwks_json}
+      VAULT_GOOGLE_SECRET_PATH: ${VAULT_GOOGLE_SECRET_PATH:-jwt/providers/google}
+      VAULT_GOOGLE_JWKS_URL: ${VAULT_GOOGLE_JWKS_URL:-https://www.googleapis.com/oauth2/v3/certs}
+      VAULT_APPLE_SECRET_PATH: ${VAULT_APPLE_SECRET_PATH:-jwt/providers/apple}
+      VAULT_APPLE_JWKS_URL: ${VAULT_APPLE_JWKS_URL:-https://appleid.apple.com/auth/keys}
+      VAULT_X_SECRET_PATH: ${VAULT_X_SECRET_PATH:-jwt/providers/x}
+      VAULT_X_JWKS_URL: ${VAULT_X_JWKS_URL:-}
+    volumes:
+      - ./vault/scripts:/vault/scripts:ro
+      - ./vault/secrets:/vault/secrets:ro
 
   broker:
     <<: *service-defaults
     build:
       context: ../video-chat-rsocket-broker
     container_name: ${BROKER_CONTAINER_NAME:-videochat-broker}
+    depends_on:
+      vault:
+        condition: service_healthy
+      vault-init:
+        condition: service_completed_successfully
     environment:
       BROKER_BACKOFFICE_ENDPOINT: ws://backoffice:7901/rsocket
+      BROKER_JWT_ENABLED: ${BROKER_JWT_ENABLED:-true}
+      BROKER_JWT_CACHE_TTL: ${BROKER_JWT_CACHE_TTL:-15m}
+      BROKER_JWT_VAULT_URI: http://vault:8200
+      BROKER_JWT_VAULT_TOKEN: ${VAULT_DEV_ROOT_TOKEN_ID:-videochat-dev-root-token}
+      BROKER_JWT_VAULT_KV_MOUNT: ${VAULT_KV_MOUNT:-secret}
+      SPRING_APPLICATION_JSON: >-
+        {
+          "broker": {
+            "jwt": {
+              "providers": [
+                {
+                  "enabled": ${BROKER_JWT_GOOGLE_ENABLED:-true},
+                  "name": "google",
+                  "issuers": ["https://accounts.google.com", "accounts.google.com"],
+                  "vaultPath": "${VAULT_GOOGLE_SECRET_PATH:-jwt/providers/google}",
+                  "vaultField": "${VAULT_PROVIDER_FIELD:-jwks_json}"
+                },
+                {
+                  "enabled": ${BROKER_JWT_APPLE_ENABLED:-true},
+                  "name": "apple",
+                  "issuers": ["https://appleid.apple.com"],
+                  "vaultPath": "${VAULT_APPLE_SECRET_PATH:-jwt/providers/apple}",
+                  "vaultField": "${VAULT_PROVIDER_FIELD:-jwks_json}"
+                },
+                {
+                  "enabled": ${BROKER_JWT_X_ENABLED:-true},
+                  "name": "x",
+                  "vaultPath": "${VAULT_X_SECRET_PATH:-jwt/providers/x}",
+                  "vaultField": "${VAULT_PROVIDER_FIELD:-jwks_json}"
+                }
+              ]
+            }
+          }
+        }
     healthcheck:
       <<: *http-healthcheck
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9898/actuator/health >/dev/null || exit 1"]
@@ -43,6 +133,8 @@ services:
     depends_on:
       frontend:
         condition: service_started
+      vault:
+        condition: service_healthy
       broker:
         condition: service_healthy
       backoffice:

@@ -7,6 +7,7 @@ This repository packages the full local deployment stack for the video chat syst
 - Angular frontend
 - Spring Boot RSocket broker
 - Spring Boot backoffice
+- HashiCorp Vault for provider JWKS storage
 - Caddy reverse proxy with locally trusted HTTPS
 
 The stack is intended for local development, LAN testing, and device validation on phones or tablets that need HTTPS and WSS.
@@ -14,6 +15,7 @@ The stack is intended for local development, LAN testing, and device validation 
 ## 2. Supported stack
 
 - Docker Compose v2
+- Vault `1.17`
 - Caddy `2.10.2`
 - Angular frontend built from `../video-chat-angular`
 - Broker built from `../video-chat-rsocket-broker`
@@ -47,6 +49,21 @@ Edit `.env` and set at least:
 
 - `VIDEOCHAT_HOST=localhost` for same-machine usage
 - `VIDEOCHAT_HOST=<LAN_IP>` for access from another device on the same network
+- `GOOGLE_OAUTH_CLIENT_ID=<your_google_web_client_id>` for Google login
+- `VIDEOCHAT_APP_MODE=production` unless you want developer diagnostics on the login page
+
+To obtain a Google web client ID:
+
+1. Open Google Cloud Console and select your project.
+2. Go to `Google Auth Platform > Branding` and complete the consent-screen basics.
+3. Go to `Google Auth Platform > Audience` and choose `External` unless this app is only for your Workspace org.
+4. Add your Google account as a test user if the app is not published.
+5. Go to `Google Auth Platform > Clients`.
+6. Create a `Web application` client.
+7. Add `https://<VIDEOCHAT_HOST>` as an authorized JavaScript origin.
+8. Add `https://<VIDEOCHAT_HOST>` as an authorized redirect URI.
+
+The frontend uses `window.location.origin` as its OAuth callback, so the redirect URI should match the app origin exactly.
 
 Validate the stack before startup:
 
@@ -58,6 +75,12 @@ Start everything:
 
 ```bash
 ./scripts/up.sh
+```
+
+Start everything in development mode:
+
+```bash
+./scripts/up-dev.sh
 ```
 
 Stop everything:
@@ -73,20 +96,34 @@ Stop everything:
 Key variables:
 
 - `VIDEOCHAT_HOST`: host or LAN IP used by Caddy certificate and redirects
+- `GOOGLE_OAUTH_CLIENT_ID`: Google OAuth web client ID injected into the frontend at runtime
+- `VIDEOCHAT_APP_MODE`: frontend login-page mode, `production` or `development`
 - `CADDY_IMAGE`: Caddy image tag, default `caddy:2.10.2`
+- `VAULT_IMAGE`: Vault image tag, default `hashicorp/vault:1.17`
 - `FRONTEND_CONTAINER_NAME`: frontend container name
 - `BROKER_CONTAINER_NAME`: broker container name
 - `BACKOFFICE_CONTAINER_NAME`: backoffice container name
 - `CADDY_CONTAINER_NAME`: Caddy container name
+- `VAULT_CONTAINER_NAME`: Vault container name
+- `VAULT_INIT_CONTAINER_NAME`: Vault bootstrap container name
 - `CADDY_LOCAL_CA_FILENAME`: exported local CA filename
+- `VAULT_HOST_PORT`: local Vault port binding, default `8200`
+- `VAULT_DEV_ROOT_TOKEN_ID`: local Vault root token
+- `VAULT_KV_MOUNT`: Vault KV-v2 mount, default `secret`
+- `VAULT_PROVIDER_FIELD`: field name used to store JWKS JSON, default `jwks_json`
+- `VAULT_GOOGLE_SECRET_PATH`, `VAULT_APPLE_SECRET_PATH`, `VAULT_X_SECRET_PATH`: Vault secret paths used by the broker
+- `VAULT_GOOGLE_JWKS_URL`, `VAULT_APPLE_JWKS_URL`, `VAULT_X_JWKS_URL`: JWKS bootstrap URLs
+- `BROKER_JWT_ENABLED`, `BROKER_JWT_CACHE_TTL`: broker JWT validation controls
+- `BROKER_JWT_GOOGLE_ENABLED`, `BROKER_JWT_APPLE_ENABLED`, `BROKER_JWT_X_ENABLED`: per-provider broker toggles
 
 ### 5.2 `docker-compose.yml`
 
 Responsibilities:
 
 - builds the frontend, broker, and backoffice from sibling repos
+- starts a local Vault dev server and a one-shot JWKS bootstrap job
 - attaches all services to the shared `videochat-network`
-- waits for broker and backoffice health checks before starting Caddy
+- waits for Vault bootstrap, broker, and backoffice health checks before starting Caddy
 - mounts the Caddy config and exported local CA certificate
 
 ### 5.3 `Caddyfile`
@@ -107,7 +144,19 @@ Assuming `VIDEOCHAT_HOST=<VIDEOCHAT_HOST>`:
 - app: `https://<VIDEOCHAT_HOST>/`
 - broker websocket endpoint: `wss://<VIDEOCHAT_HOST>/rsocket`
 - backoffice API: `https://<VIDEOCHAT_HOST>/backoffice-api/api/rooms`
+- Vault API: `http://127.0.0.1:${VAULT_HOST_PORT:-8200}`
 - CA download: `http://<VIDEOCHAT_HOST>/local-ca.crt`
+
+## 6.1 Vault provider key bootstrap
+
+On startup, the `vault-init` job ensures the configured KV-v2 mount exists and writes provider JWKS documents into Vault:
+
+- Google uses `VAULT_GOOGLE_JWKS_URL` by default.
+- Apple uses `VAULT_APPLE_JWKS_URL` by default.
+- X uses `VAULT_X_JWKS_URL` when set.
+- Any provider can be overridden by adding `google-jwks.json`, `apple-jwks.json`, or `x-jwks.json` to `vault/secrets/`.
+
+The broker reads those secrets from Vault instead of from static public-key configuration.
 
 ## 7. Validation and test commands
 
@@ -127,6 +176,18 @@ Start or rebuild the full stack:
 
 ```bash
 docker compose up -d --build
+```
+
+Start the stack with frontend development diagnostics enabled:
+
+```bash
+./scripts/up-dev.sh
+```
+
+Update the frontend with a Google OAuth client ID and rebuild only that service:
+
+```bash
+./scripts/configure-google-oauth.sh <your-google-web-client-id>
 ```
 
 Recreate only Caddy after a proxy or host change:
@@ -174,6 +235,13 @@ Inspect a container definition:
 
 ```bash
 docker inspect videochat-caddy
+docker inspect videochat-vault
+```
+
+Check Vault health directly:
+
+```bash
+curl -fsS http://127.0.0.1:${VAULT_HOST_PORT:-8200}/v1/sys/health
 ```
 
 Check broker health directly:

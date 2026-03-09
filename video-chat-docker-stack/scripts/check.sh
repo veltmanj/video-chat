@@ -17,6 +17,10 @@ echo '== docker compose ps =='
 docker compose ps
 
 echo
+echo '== vault health (inside container) =='
+docker compose exec -T vault wget -q -O - http://127.0.0.1:8200/v1/sys/health || true
+
+echo
 echo '== broker health (inside container) =='
 docker compose exec -T broker curl -fsS http://127.0.0.1:9898/actuator/health || true
 
