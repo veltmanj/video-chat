@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { type MockedObject, vi } from 'vitest';
 import { AuthService } from '../core/services/auth.service';
 import { LoginComponent } from './login.component';
@@ -17,7 +18,10 @@ describe('LoginComponent', () => {
 
     await TestBed.configureTestingModule({
       imports: [LoginComponent],
-      providers: [{ provide: AuthService, useValue: authService }]
+      providers: [
+        provideRouter([]),
+        { provide: AuthService, useValue: authService }
+      ]
     }).compileComponents();
 
     fixture = TestBed.createComponent(LoginComponent);
@@ -42,5 +46,18 @@ describe('LoginComponent', () => {
     const text = fixture.nativeElement.textContent || '';
     expect(text).toContain('Development mode');
     expect(text).toContain('Missing Google client ID');
+  });
+
+  it('shows the legal policy links on the login card', () => {
+    const text = fixture.nativeElement.textContent || '';
+    const links = Array.from(fixture.nativeElement.querySelectorAll('a')) as HTMLAnchorElement[];
+    const hrefs = links.map((link) => link.getAttribute('href'));
+
+    expect(text).toContain('Terms of Service');
+    expect(text).toContain('Acceptable Use Policy');
+    expect(text).toContain('Cookie Policy');
+    expect(hrefs).toContain('/terms');
+    expect(hrefs).toContain('/acceptable-use');
+    expect(hrefs).toContain('/cookies');
   });
 });

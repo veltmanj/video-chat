@@ -248,6 +248,23 @@
   line-height: 1.6;
 }
 
+.policy-note {
+  margin: 1rem 0 0;
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.policy-note a {
+  color: #facc15;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.policy-note a:hover {
+  text-decoration: underline;
+}
+
 .legal-note {
   margin: 1.1rem 0 0;
   color: rgba(148, 163, 184, 0.78);

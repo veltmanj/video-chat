@@ -11,7 +11,6 @@
   <section class="login-panel">
     <div class="login-card">
       <p class="card-kicker">Sign In</p>
-      <h2>Authenticate to Continue</h2>
 
       <p class="error-banner" *ngIf="loginUnavailableMessage">{{ loginUnavailableMessage }}</p>
       <p class="error-banner" *ngIf="errorMessage">{{ errorMessage }}</p>
@@ -53,6 +52,14 @@
         </span>
         <small>{{ provider.hint }}</small>
       </button>
+
+      <p class="policy-note">
+        By continuing, you acknowledge the
+        <a routerLink="/terms">Terms of Service</a>,
+        <a routerLink="/acceptable-use">Acceptable Use Policy</a>,
+        and <a routerLink="/cookies">Cookie Policy</a>.
+        Google and other sign-in providers may place cookies on their own domains to complete authentication.
+      </p>
 
       <div class="dev-panel" *ngIf="showDeveloperPanel">
         <p class="dev-kicker">Development mode</p>

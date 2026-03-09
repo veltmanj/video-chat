@@ -1,10 +1,16 @@
 import { Routes } from '@angular/router';
 import { AuthGuard } from './core/services/auth.guard';
+import { AcceptableUseComponent } from './pages/acceptable-use.component';
 import { LiveRoomComponent } from './pages/live-room/live-room.component';
+import { CookiePolicyComponent } from './pages/cookie-policy.component';
 import { LoginComponent } from './pages/login.component';
+import { TermsOfServiceComponent } from './pages/terms-of-service.component';
 
 export const appRoutes: Routes = [
   { path: '', component: LiveRoomComponent, canActivate: [AuthGuard] },
+  { path: 'acceptable-use', component: AcceptableUseComponent },
+  { path: 'cookies', component: CookiePolicyComponent },
   { path: 'login', component: LoginComponent },
+  { path: 'terms', component: TermsOfServiceComponent },
   { path: '**', redirectTo: 'login' }
 ];
