@@ -33,7 +33,8 @@ export class CameraGridComponent implements AfterViewChecked {
         node.srcObject = feed.stream;
       }
 
-      if (node.paused) {
+      const shouldAttemptPlayback = node.paused || node.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || node.videoWidth === 0;
+      if (shouldAttemptPlayback) {
         const playAttempt = node.play();
         if (playAttempt && typeof playAttempt.catch === 'function') {
           playAttempt.catch(() => {

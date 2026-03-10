@@ -76,6 +76,13 @@ export class WebrtcMeshService {
   }
 
   /**
+   * Exposes whether a peer connection already exists so room events can avoid duplicate renegotiation.
+   */
+  hasPeer(remoteClientId: string): boolean {
+    return this.peers.has(remoteClientId);
+  }
+
+  /**
    * Tears down peer state and removes any rendered remote tiles for a departed participant.
    */
   onPeerLeft(remoteClientId: string): void {
@@ -125,6 +132,9 @@ export class WebrtcMeshService {
    * Applies an incoming signaling message using the "perfect negotiation" pattern.
    */
   async handleSignal(fromClientId: string, fromName: string, payload: WebrtcSignalPayload): Promise<void> {
+    const description = this.normalizeDescription(payload.signal.description);
+    const candidate = payload.signal.candidate;
+
     if (!this.identity || payload.targetClientId !== this.identity.clientId) {
       return;
     }
@@ -132,8 +142,6 @@ export class WebrtcMeshService {
     this.peerNames.set(fromClientId, fromName);
 
     const peer = this.ensurePeer(fromClientId);
-    const description = payload.signal.description;
-    const candidate = payload.signal.candidate;
 
     if (description) {
       const offerCollision = description.type === 'offer' && (peer.makingOffer || peer.pc.signalingState !== 'stable');
@@ -155,7 +163,7 @@ export class WebrtcMeshService {
       if (description.type === 'offer') {
         await peer.pc.setLocalDescription(await peer.pc.createAnswer());
         this.publishSignal(fromClientId, {
-          description: peer.pc.localDescription || undefined
+          description: this.serializeDescription(peer.pc.localDescription)
         });
       }
 
@@ -319,7 +327,7 @@ export class WebrtcMeshService {
       peer.makingOffer = true;
       await peer.pc.setLocalDescription(await peer.pc.createOffer());
       this.publishSignal(remoteClientId, {
-        description: peer.pc.localDescription || undefined
+        description: this.serializeDescription(peer.pc.localDescription)
       });
     } finally {
       peer.makingOffer = false;
@@ -338,6 +346,31 @@ export class WebrtcMeshService {
       targetClientId,
       signal
     });
+  }
+
+  /**
+   * Browser-native RTCSessionDescription objects are not consistently JSON-serializable across engines.
+   */
+  private serializeDescription(description: RTCSessionDescription | RTCSessionDescriptionInit | null | undefined): RTCSessionDescriptionInit | undefined {
+    if (!description || typeof description.type !== 'string') {
+      return undefined;
+    }
+
+    return {
+      type: description.type,
+      sdp: typeof description.sdp === 'string' ? description.sdp : undefined
+    };
+  }
+
+  private normalizeDescription(description: RTCSessionDescriptionInit | undefined): RTCSessionDescriptionInit | null {
+    if (!description || typeof description.type !== 'string') {
+      return null;
+    }
+
+    return {
+      type: description.type,
+      sdp: typeof description.sdp === 'string' ? description.sdp : undefined
+    };
   }
 
   /**
@@ -381,13 +414,13 @@ export class WebrtcMeshService {
     }
 
     const remoteName = this.peerNames.get(remoteClientId) || 'Remote guest';
-    const remoteStream = new MediaStream([track]);
+    const resolvedStream = new MediaStream([track]);
     this.remoteFeedUpserter({
       id: `remote-${remoteClientId}-${track.id}`,
       ownerId: remoteClientId,
       ownerName: remoteName,
       label: `${remoteName} camera`,
-      stream: remoteStream,
+      stream: resolvedStream,
       local: false,
       muted: true,
       online: true

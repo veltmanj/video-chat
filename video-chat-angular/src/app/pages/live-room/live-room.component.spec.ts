@@ -85,6 +85,7 @@ describe('LiveRoomComponent', () => {
       dispose: vi.fn(),
       addLocalFeed: vi.fn(),
       removeLocalFeed: vi.fn(),
+      hasPeer: vi.fn(),
       onPeerJoined: vi.fn(),
       onPeerLeft: vi.fn(),
       handleSignal: vi.fn()
@@ -99,6 +100,7 @@ describe('LiveRoomComponent', () => {
     mediaDeviceService.startCamera.mockResolvedValue({ id: 'stream-1', getTracks: () => [] } as any);
     rsocketRoomService.connect.mockResolvedValue(undefined);
     rsocketRoomService.publishWithAck.mockResolvedValue(true);
+    webrtcMeshService.hasPeer.mockReturnValue(false);
 
     let counter = 0;
     roomSessionService.createId.mockImplementation((prefix: string) => `${prefix}-${++counter}`);
@@ -141,6 +143,9 @@ describe('LiveRoomComponent', () => {
     const brokerUrls = connectArgs[2] as string[];
     expect(connectArgs[3]).toBe('broker-token');
     expect(brokerUrls).toContain('/rsocket');
+    expect(component.connectionState).toBe('CONNECTED');
+    expect(component.connected).toBe(true);
+    expect(component.isConnecting).toBe(false);
     expect(webrtcMeshService.initialize).toHaveBeenCalled();
   });
 
@@ -231,6 +236,115 @@ describe('LiveRoomComponent', () => {
     await fixture.whenStable();
 
     expect(webrtcMeshService.onPeerJoined).toHaveBeenCalledWith('client-remote-1', 'Remote 1');
+  });
+
+  it('schedules a recovery renegotiation when CAMERA_PUBLISHED arrives for an existing peer without a remote feed', async () => {
+    vi.useFakeTimers();
+    component.accessToken = 'broker-token';
+    await component.connectRoom();
+    stateSubject.next('CONNECTED');
+    webrtcMeshService.hasPeer.mockReturnValue(true);
+
+    roomEventsSubject.next({
+      type: 'CAMERA_PUBLISHED',
+      roomId: 'main-stage',
+      senderId: 'client-remote-existing',
+      senderName: 'Remote Existing',
+      sentAt: new Date().toISOString(),
+      payload: {
+        feedId: 'feed-remote-existing',
+        label: 'Remote Camera'
+      }
+    });
+
+    await vi.advanceTimersByTimeAsync(1600);
+
+    expect(webrtcMeshService.onPeerJoined).toHaveBeenCalledWith('client-remote-existing', 'Remote Existing');
+    expect(roomSessionService.consumeRoomEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'CAMERA_PUBLISHED', senderId: 'client-remote-existing' }),
+      expect.any(String)
+    );
+
+    vi.useRealTimers();
+  });
+
+  it('cancels recovery renegotiation when an offer arrives from the same peer', async () => {
+    vi.useFakeTimers();
+    component.accessToken = 'broker-token';
+    await component.connectRoom();
+    stateSubject.next('CONNECTED');
+    webrtcMeshService.hasPeer.mockReturnValue(true);
+
+    roomEventsSubject.next({
+      type: 'CAMERA_PUBLISHED',
+      roomId: 'main-stage',
+      senderId: 'client-remote-existing',
+      senderName: 'Remote Existing',
+      sentAt: new Date().toISOString(),
+      payload: {
+        feedId: 'feed-remote-existing',
+        label: 'Remote Camera'
+      }
+    });
+
+    roomEventsSubject.next({
+      type: 'WEBRTC_SIGNAL',
+      roomId: 'main-stage',
+      senderId: 'client-remote-existing',
+      senderName: 'Remote Existing',
+      sentAt: new Date().toISOString(),
+      payload: {
+        targetClientId: 'client-1',
+        signal: {
+          description: {
+            type: 'offer',
+            sdp: 'v=0'
+          }
+        }
+      }
+    });
+
+    await vi.advanceTimersByTimeAsync(1600);
+
+    expect(webrtcMeshService.handleSignal).toHaveBeenCalledWith(
+      'client-remote-existing',
+      'Remote Existing',
+      expect.objectContaining({
+        targetClientId: 'client-1',
+        signal: expect.objectContaining({
+          description: expect.objectContaining({ type: 'offer' })
+        })
+      })
+    );
+    expect(webrtcMeshService.onPeerJoined).not.toHaveBeenCalledWith('client-remote-existing', 'Remote Existing');
+
+    vi.useRealTimers();
+  });
+
+  it('handles replayed room events that arrive before the broker connect promise resolves', async () => {
+    let resolveConnect: (() => void) | undefined;
+    rsocketRoomService.connect.mockImplementation(() => new Promise<void>((resolve) => {
+      roomEventsSubject.next({
+        type: 'CAMERA_PUBLISHED',
+        roomId: 'main-stage',
+        senderId: 'client-remote-early',
+        senderName: 'Remote Early',
+        sentAt: new Date().toISOString(),
+        payload: {
+          feedId: 'feed-remote-early',
+          label: 'Early Camera'
+        }
+      });
+      resolveConnect = resolve;
+    }));
+
+    component.accessToken = 'broker-token';
+    const connectPromise = component.connectRoom();
+    expect(resolveConnect).toBeDefined();
+    resolveConnect!();
+    await connectPromise;
+
+    expect(webrtcMeshService.onPeerJoined).toHaveBeenCalledWith('client-remote-early', 'Remote Early');
   });
 
   it('refreshes devices automatically on media device change', async () => {

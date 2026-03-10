@@ -42,6 +42,7 @@ interface BrokerSocket {
 interface BrokerResponseObserver {
   onComplete(): void;
   onError(error: unknown): void;
+  onNext?(payload: { data?: unknown }): void;
   onSubscribe(subscription: BrokerSubscription): void;
 }
 
@@ -109,6 +110,7 @@ export class RsocketRoomService {
   private static readonly CONNECT_CLOSED_RETRIES_SINGLE_URL = 3;
   private static readonly REQUEST_N = 2147483647;
   private static readonly JOIN_CAPABILITIES = ['multi-webcam', 'chat', 'heartbeat'];
+  private static readonly HEARTBEAT_INTERVAL_MS = 5000;
 
   private readonly stateSubject = new BehaviorSubject<ConnectionState>('DISCONNECTED');
   private readonly eventsSubject = new Subject<RoomEvent>();
@@ -134,6 +136,7 @@ export class RsocketRoomService {
    */
   private preferredBrokerUrl: string | null = null;
   private pendingConnectCancel: (() => void) | null = null;
+  private heartbeatTimer: TimerHandle | null = null;
 
   readonly state$: Observable<ConnectionState> = this.stateSubject.asObservable();
   readonly roomEvents$: Observable<RoomEvent> = this.eventsSubject.asObservable();
@@ -186,6 +189,7 @@ export class RsocketRoomService {
   disconnect(): void {
     this.reconnectEnabled = false;
     this.clearReconnectTimer();
+    this.clearHeartbeatTimer();
     this.reconnecting = false;
     this.cancelPendingConnect();
 
@@ -258,12 +262,14 @@ export class RsocketRoomService {
    */
   private activateBrokerConnection(brokerUrl: string, socket: BrokerSocket): void {
     this.clearReconnectTimer();
+    this.clearHeartbeatTimer();
     this.brokerState = { url: brokerUrl, socket };
     this.preferredBrokerUrl = brokerUrl;
     this.reconnecting = false;
     this.transitionTo('CONNECTED');
     this.subscribeToRoomEvents(socket);
     this.publish('ROOM_JOINED', { capabilities: [...RsocketRoomService.JOIN_CAPABILITIES] });
+    this.startHeartbeat();
   }
 
   /**
@@ -488,11 +494,30 @@ export class RsocketRoomService {
     };
 
     return new Promise((resolve, reject) => {
+      let settled = false;
       socket.requestResponse!(this.createRouteRequest(RsocketRoomService.ROUTES.authorize, payload)).subscribe({
+        onNext: () => {
+          if (settled) {
+            return;
+          }
+
+          settled = true;
+          resolve();
+        },
         onComplete: () => {
+          if (settled) {
+            return;
+          }
+
+          settled = true;
           resolve();
         },
         onError: (error: unknown) => {
+          if (settled) {
+            return;
+          }
+
+          settled = true;
           reject(error);
         },
         onSubscribe: () => {
@@ -557,6 +582,29 @@ export class RsocketRoomService {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+  }
+
+  private startHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      return;
+    }
+
+    this.heartbeatTimer = setInterval(() => {
+      if (!this.reconnectEnabled || !this.brokerState || !this.identity || !this.currentRoomId) {
+        return;
+      }
+
+      this.publish('HEARTBEAT', { timestamp: new Date().toISOString() });
+    }, RsocketRoomService.HEARTBEAT_INTERVAL_MS);
+  }
+
+  private clearHeartbeatTimer(): void {
+    if (!this.heartbeatTimer) {
+      return;
+    }
+
+    clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = null;
   }
 
   /**
@@ -720,6 +768,7 @@ export class RsocketRoomService {
 
   private closeSocket(): void {
     this.cancelPendingConnect();
+    this.clearHeartbeatTimer();
     this.streamToken++;
     this.streamSubscription?.cancel?.();
     this.streamSubscription = null;

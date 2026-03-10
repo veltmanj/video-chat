@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, NgZone, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, DestroyRef, NgZone, OnDestroy, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { environment } from '../../../environments/environment';
@@ -35,6 +35,7 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
   private static readonly DEFAULT_ROOM_ID = 'main-stage';
   private static readonly DEFAULT_DISPLAY_NAME_PREFIX = 'Host';
   private static readonly ACCESS_TOKEN_STORAGE_KEY = 'pulse-room:broker-access-token';
+  private static readonly RENEGOTIATION_RECOVERY_DELAY_MS = 1500;
 
   roomId = 'main-stage';
   displayName = `${LiveRoomComponent.DEFAULT_DISPLAY_NAME_PREFIX}-${Math.floor(Math.random() * 1000)}`;
@@ -55,6 +56,7 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
   private currentIdentity: ClientIdentity | null = null;
   private readonly destroyRef = inject(DestroyRef);
   private readonly ngZone = inject(NgZone);
+  private readonly changeDetectorRef = inject(ChangeDetectorRef);
   /**
    * Browser media device callbacks can arrive outside Angular change detection, so always re-enter
    * the zone before updating component state.
@@ -62,6 +64,7 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
   private readonly deviceChangeListener = () => {
     void this.ngZone.run(() => this.refreshDevices());
   };
+  private readonly renegotiationRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(
     private auth: AuthService,
@@ -93,7 +96,7 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     this.roomSessionService.feeds$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((feeds: CameraFeed[]) => {
-        this.ngZone.run(() => {
+        this.runInZone(() => {
           this.feeds = feeds;
         });
       });
@@ -101,7 +104,7 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     this.roomSessionService.messages$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((messages: ChatMessage[]) => {
-        this.ngZone.run(() => {
+        this.runInZone(() => {
           this.messages = messages;
         });
       });
@@ -109,7 +112,7 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     this.rsocketRoomService.state$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((state: ConnectionState) => {
-        this.ngZone.run(() => {
+        this.runInZone(() => {
           this.connectionState = state;
           this.applyConnectionState(state);
         });
@@ -118,7 +121,14 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     this.rsocketRoomService.roomEvents$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((event: RoomEvent) => {
-        void this.ngZone.run(() => this.handleRoomEvent(event));
+        void this.runInZone(() =>
+          this.handleRoomEvent(event).catch((error) => {
+            console.error('Room event handling failed', error);
+            if (this.auth.isDevelopmentMode) {
+              this.setError(`Room event handling failed: ${this.extractErrorMessage(error)}`);
+            }
+          })
+        );
       });
 
     this.registerDeviceChangeListener();
@@ -130,6 +140,7 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
    */
   ngOnDestroy(): void {
     this.unregisterDeviceChangeListener();
+    this.clearRenegotiationRecoveryTimers();
     this.stopAllLocalStreams();
     this.webrtcMeshService.dispose();
     this.rsocketRoomService.disconnect();
@@ -157,27 +168,43 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     }
 
     const identity = this.createIdentity();
+    this.runInZone(() => {
+      this.currentIdentity = identity;
+      this.initializeWebrtcMesh(identity);
+    });
 
     try {
       await this.rsocketRoomService.connect(identity, this.roomId.trim(), brokerUrls, authToken);
-      this.accessToken = authToken;
-      this.storeAccessToken(authToken);
-      this.currentIdentity = identity;
-      this.initializeWebrtcMesh(identity);
+      this.runInZone(() => {
+        this.connectionState = 'CONNECTED';
+        this.applyConnectionState('CONNECTED');
+        this.isConnecting = false;
+        this.accessToken = authToken;
+        this.storeAccessToken(authToken);
+      });
     } catch (error) {
-      console.error('Connectie mislukt', error);
-      const message = this.extractErrorMessage(error);
-      if (message.includes('SecurityError') || message.includes('insecure')) {
-        this.setError('Connectie geblokkeerd door browser security. Gebruik op HTTPS alleen wss:// of /rsocket.');
-      } else if (message.toLowerCase().includes('unauthorized') || message.toLowerCase().includes('forbidden')) {
-        this.setError('Toegang geweigerd. Controleer het broker token of log opnieuw in voor een nieuw ID token.');
-      } else if (message.includes('localhost') || message.includes('127.0.0.1')) {
-        this.setError('Connectie naar localhost mislukt. Gebruik /rsocket of wss://<LAN-IP>/rsocket.');
-      } else {
-        this.setError(`Connectie mislukt: ${message}`);
-      }
+      this.runInZone(() => {
+        this.currentIdentity = null;
+        this.webrtcMeshService.dispose();
+        console.error('Connectie mislukt', error);
+        const message = this.extractErrorMessage(error);
+        if (message.includes('SecurityError') || message.includes('insecure')) {
+          this.setError('Connectie geblokkeerd door browser security. Gebruik op HTTPS alleen wss:// of /rsocket.');
+        } else if (message.toLowerCase().includes('unauthorized') || message.toLowerCase().includes('forbidden')) {
+          const detailedMessage = this.auth.isDevelopmentMode
+            ? `Toegang geweigerd. ${message}`
+            : 'Toegang geweigerd. Controleer het broker token of log opnieuw in voor een nieuw ID token.';
+          this.setError(detailedMessage);
+        } else if (message.includes('localhost') || message.includes('127.0.0.1')) {
+          this.setError('Connectie naar localhost mislukt. Gebruik /rsocket of wss://<LAN-IP>/rsocket.');
+        } else {
+          this.setError(`Connectie mislukt: ${message}`);
+        }
+      });
     } finally {
-      this.isConnecting = false;
+      this.runInZone(() => {
+        this.isConnecting = false;
+      });
     }
   }
 
@@ -199,20 +226,25 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
   async refreshDevices(): Promise<void> {
     this.clearStatus();
     try {
-      this.devices = await this.mediaDeviceService.listVideoInputs();
-      this.syncSelectedDeviceSelection();
+      const devices = await this.mediaDeviceService.listVideoInputs();
+      this.runInZone(() => {
+        this.devices = devices;
+        this.syncSelectedDeviceSelection();
 
-      if (!this.devices.length) {
-        const insecureContext = typeof window !== 'undefined' && !window.isSecureContext;
-        if (insecureContext) {
-          this.setError('Geen camera beschikbaar op een onveilige verbinding. Open de app via HTTPS (of localhost).');
-        } else {
-          this.setError('Geen camera gevonden. Check browser permissions en sluit andere camera-apps.');
+        if (!this.devices.length) {
+          const insecureContext = typeof window !== 'undefined' && !window.isSecureContext;
+          if (insecureContext) {
+            this.setError('Geen camera beschikbaar op een onveilige verbinding. Open de app via HTTPS (of localhost).');
+          } else {
+            this.setError('Geen camera gevonden. Check browser permissions en sluit andere camera-apps.');
+          }
         }
-      }
+      });
     } catch (error) {
-      console.error('Device refresh mislukt', error);
-      this.setError('Kon camera-lijst niet laden.');
+      this.runInZone(() => {
+        console.error('Device refresh mislukt', error);
+        this.setError('Kon camera-lijst niet laden.');
+      });
     }
   }
 
@@ -238,26 +270,34 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
       const stream = await this.mediaDeviceService.startCamera(device.deviceId);
       const feedId = this.roomSessionService.createId('feed');
 
-      this.roomSessionService.addLocalFeed(this.createLocalFeed(feedId, device, stream));
-      this.webrtcMeshService.addLocalFeed(feedId, device.label, stream);
-      this.rsocketRoomService.publish('CAMERA_PUBLISHED', this.createCameraPublishedPayload(feedId, device));
+      this.runInZone(() => {
+        this.roomSessionService.addLocalFeed(this.createLocalFeed(feedId, device, stream));
+        this.webrtcMeshService.addLocalFeed(feedId, device.label, stream);
+        this.rsocketRoomService.publish('CAMERA_PUBLISHED', this.createCameraPublishedPayload(feedId, device));
+      });
 
       await this.refreshDevices();
-      this.uiInfo = `Camera toegevoegd: ${device.label}`;
+      this.runInZone(() => {
+        this.uiInfo = `Camera toegevoegd: ${device.label}`;
+      });
     } catch (error: any) {
-      console.error('Camera start mislukt', error);
-      const reason = error && error.name ? error.name : 'UnknownError';
-      if (reason === 'NotAllowedError') {
-        this.setError('Camera permission geweigerd. Sta camera-toegang toe in de browser.');
-      } else if (reason === 'NotReadableError') {
-        this.setError('Camera is in gebruik door een andere app.');
-      } else if (reason === 'NotFoundError') {
-        this.setError('Camera niet gevonden.');
-      } else {
-        this.setError(`Kon camera niet starten (${reason}).`);
-      }
+      this.runInZone(() => {
+        console.error('Camera start mislukt', error);
+        const reason = error && error.name ? error.name : 'UnknownError';
+        if (reason === 'NotAllowedError') {
+          this.setError('Camera permission geweigerd. Sta camera-toegang toe in de browser.');
+        } else if (reason === 'NotReadableError') {
+          this.setError('Camera is in gebruik door een andere app.');
+        } else if (reason === 'NotFoundError') {
+          this.setError('Camera niet gevonden.');
+        } else {
+          this.setError(`Kon camera niet starten (${reason}).`);
+        }
+      });
     } finally {
-      this.isAddingCamera = false;
+      this.runInZone(() => {
+        this.isAddingCamera = false;
+      });
     }
   }
 
@@ -392,6 +432,13 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
       return error;
     }
 
+    if (typeof error === 'object' && error !== null && 'source' in error) {
+      const sourceMessage = this.extractErrorMessage((error as { source?: unknown }).source);
+      if (sourceMessage && sourceMessage !== 'onbekende fout') {
+        return sourceMessage;
+      }
+    }
+
     if (typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
       return error.message;
     }
@@ -437,18 +484,29 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     }
 
     if (event.type === 'CAMERA_PUBLISHED' && event.senderId !== this.currentIdentity.clientId) {
-      await this.webrtcMeshService.onPeerJoined(event.senderId, event.senderName);
+      const peerExists = this.webrtcMeshService.hasPeer(event.senderId);
+      if (!peerExists) {
+        await this.webrtcMeshService.onPeerJoined(event.senderId, event.senderName);
+      } else {
+        this.scheduleRenegotiationRecovery(event.senderId, event.senderName);
+      }
       this.roomSessionService.consumeRoomEvent(event, this.currentIdentity.clientId);
       return;
     }
 
     if (event.type === 'ROOM_LEFT' && event.senderId !== this.currentIdentity.clientId) {
+      this.cancelRenegotiationRecovery(event.senderId);
       this.webrtcMeshService.onPeerLeft(event.senderId);
       return;
     }
 
     if (event.type === 'WEBRTC_SIGNAL' && event.senderId !== this.currentIdentity.clientId && event.payload) {
-      await this.webrtcMeshService.handleSignal(event.senderId, event.senderName, event.payload as WebrtcSignalPayload);
+      const signalPayload = event.payload as WebrtcSignalPayload;
+      if (signalPayload.signal.description?.type === 'offer') {
+        this.cancelRenegotiationRecovery(event.senderId);
+      }
+
+      await this.webrtcMeshService.handleSignal(event.senderId, event.senderName, signalPayload);
       return;
     }
 
@@ -521,26 +579,68 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     this.webrtcMeshService.initialize(
       identity,
       (payload: WebrtcSignalPayload) => {
-        this.ngZone.run(() => {
+        this.runInZone(() => {
           this.rsocketRoomService.publish('WEBRTC_SIGNAL', payload);
         });
       },
       (remoteFeed: CameraFeed) => {
-        this.ngZone.run(() => {
+        this.runInZone(() => {
+          this.cancelRenegotiationRecovery(remoteFeed.ownerId);
           this.roomSessionService.upsertRemoteFeed(remoteFeed);
         });
       },
       (ownerId: string, trackId: string) => {
-        this.ngZone.run(() => {
+        this.runInZone(() => {
           this.roomSessionService.removeRemoteTrackFeed(ownerId, trackId);
         });
       },
       (ownerId: string) => {
-        this.ngZone.run(() => {
+        this.runInZone(() => {
           this.roomSessionService.removeRemoteFeedsByOwner(ownerId);
         });
       }
     );
+  }
+
+  private runInZone<T>(callback: () => T): T {
+    const result = NgZone.isInAngularZone() ? callback() : this.ngZone.run(callback);
+    this.changeDetectorRef.detectChanges();
+    return result;
+  }
+
+  private scheduleRenegotiationRecovery(remoteClientId: string, remoteName: string): void {
+    this.cancelRenegotiationRecovery(remoteClientId);
+
+    const timer = setTimeout(() => {
+      this.renegotiationRecoveryTimers.delete(remoteClientId);
+
+      if (!this.connected || !this.currentIdentity || this.hasRemoteFeed(remoteClientId)) {
+        return;
+      }
+
+      void this.runInZone(() => this.webrtcMeshService.onPeerJoined(remoteClientId, remoteName));
+    }, LiveRoomComponent.RENEGOTIATION_RECOVERY_DELAY_MS);
+
+    this.renegotiationRecoveryTimers.set(remoteClientId, timer);
+  }
+
+  private cancelRenegotiationRecovery(remoteClientId: string): void {
+    const existingTimer = this.renegotiationRecoveryTimers.get(remoteClientId);
+    if (!existingTimer) {
+      return;
+    }
+
+    clearTimeout(existingTimer);
+    this.renegotiationRecoveryTimers.delete(remoteClientId);
+  }
+
+  private clearRenegotiationRecoveryTimers(): void {
+    this.renegotiationRecoveryTimers.forEach((timer) => clearTimeout(timer));
+    this.renegotiationRecoveryTimers.clear();
+  }
+
+  private hasRemoteFeed(remoteClientId: string): boolean {
+    return this.feeds.some((feed) => !feed.local && feed.ownerId === remoteClientId && !!feed.stream);
   }
 
   /**
