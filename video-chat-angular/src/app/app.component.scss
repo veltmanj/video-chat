@@ -2,3 +2,32 @@
   display: block;
   min-height: 100vh;
 }
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  background: rgba(3, 7, 18, 0.72);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.topbar a {
+  text-decoration: none;
+  color: #cbd5e1;
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.topbar a.active {
+  background: rgba(56, 189, 248, 0.18);
+  color: #f8fafc;
+}

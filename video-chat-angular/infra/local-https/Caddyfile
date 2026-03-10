@@ -14,6 +14,11 @@
     reverse_proxy 127.0.0.1:7901
   }
 
+  # Social REST API via the same HTTPS origin.
+  handle_path /social-api/* {
+    reverse_proxy 127.0.0.1:7901
+  }
+
   # Optional: expose backoffice RSocket websocket via wss://host:8443/backoffice-rsocket
   @backoffice_rsocket path /backoffice-rsocket*
   handle @backoffice_rsocket {

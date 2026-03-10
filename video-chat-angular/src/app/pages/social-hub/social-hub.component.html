@@ -1,0 +1,151 @@
+<main class="social-page" *ngIf="!loading; else loadingState">
+  <section class="profile-column" *ngIf="me as profile">
+    <div class="panel identity-panel">
+      <p class="kicker">Your profile</p>
+      <h1>{{ profile.displayName }}</h1>
+      <p class="handle">@{{ profile.handle }}</p>
+      <p class="bio-preview">{{ profile.bio || 'No bio yet.' }}</p>
+      <div class="stats">
+        <span>{{ profile.followerCount }} followers</span>
+        <span>{{ profile.followingCount }} following</span>
+        <span>{{ profile.visibility === 'PRIVATE' ? 'Private' : 'Public' }}</span>
+      </div>
+    </div>
+
+    <form class="panel form-panel" (ngSubmit)="saveProfile()">
+      <label>
+        <span>Display name</span>
+        <input type="text" [(ngModel)]="displayName" name="displayName" maxlength="80">
+      </label>
+
+      <label>
+        <span>Bio</span>
+        <textarea [(ngModel)]="bio" name="bio" rows="4" maxlength="400"></textarea>
+      </label>
+
+      <label>
+        <span>Visibility</span>
+        <select [(ngModel)]="visibility" name="visibility">
+          <option value="PUBLIC">Public</option>
+          <option value="PRIVATE">Private</option>
+        </select>
+      </label>
+
+      <button type="submit">Save profile</button>
+    </form>
+
+    <div class="panel grant-panel" *ngIf="accessGrants.length">
+      <p class="kicker">Granted access</p>
+      <ul>
+        <li *ngFor="let profile of accessGrants; trackBy: trackByHandle">@{{ profile.handle }} · {{ profile.displayName }}</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="feed-column">
+    <div class="panel composer-panel">
+      <p class="kicker">New post</p>
+      <textarea [(ngModel)]="newPostBody" name="newPostBody" rows="4" maxlength="2000" placeholder="Share an update with your network."></textarea>
+      <button type="button" (click)="publishPost()">Publish</button>
+    </div>
+
+    <p class="status-banner" *ngIf="statusMessage">{{ statusMessage }}</p>
+    <p class="error-banner" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+    <article class="panel post-card" *ngFor="let post of feed; trackBy: trackByPost">
+      <header>
+        <div>
+          <h2>{{ post.authorDisplayName }}</h2>
+          <p>@{{ post.authorHandle }}</p>
+        </div>
+        <time>{{ post.createdAt | date:'medium' }}</time>
+      </header>
+      <p class="post-body">{{ post.body }}</p>
+      <div class="reaction-row">
+        <button
+          type="button"
+          *ngFor="let reaction of reactionOptions"
+          [class.active]="post.viewerReactions.includes(reaction)"
+          (click)="toggleReaction(post, reaction)">
+          {{ reaction }} {{ post.reactionCounts[reaction] || 0 }}
+        </button>
+      </div>
+    </article>
+  </section>
+
+  <section class="discovery-column">
+    <div class="panel search-panel">
+      <p class="kicker">Discovery</p>
+      <div class="search-controls">
+        <input type="search" [(ngModel)]="searchQuery" name="searchQuery" placeholder="Search by handle or name">
+        <select [(ngModel)]="searchScope" name="searchScope">
+          <option value="all">All profiles</option>
+          <option value="mutual">Mutual connections</option>
+        </select>
+      </div>
+      <p class="search-hint" *ngIf="canGrantAccess">Search everyone or switch to mutual connections to invite friends in bulk.</p>
+      <button type="button" (click)="performSearch()">Search</button>
+    </div>
+
+    <div class="panel result-list" *ngIf="searchResults.length">
+      <div class="bulk-actions" *ngIf="canGrantAccess">
+        <p>{{ selectedGrantHandles.length ? selectedGrantHandles.length + ' selected for access grants' : 'Select profiles to grant access.' }}</p>
+        <button type="button" (click)="grantSelectedAccess()" [disabled]="!canSubmitSelectedAccess">Grant selected access</button>
+      </div>
+
+      <div class="selected-grants" *ngIf="selectedGrantHandles.length">
+        <button type="button" class="chip-button" *ngFor="let handle of selectedGrantHandles" (click)="removeGrantSelection(handle)">
+          @{{ handle }} ×
+        </button>
+      </div>
+
+      <article class="result-card" *ngFor="let profile of searchResults; trackBy: trackByHandle">
+        <div class="result-copy">
+          <h2>{{ profile.displayName }}</h2>
+          <p>@{{ profile.handle }}</p>
+          <small>{{ profile.visibility === 'PRIVATE' ? 'Private profile' : 'Public profile' }}</small>
+        </div>
+        <div class="result-actions">
+          <button type="button" (click)="openProfile(profile.handle)">View</button>
+          <button type="button" (click)="toggleFollow(profile)">{{ profile.following ? 'Unfollow' : 'Follow' }}</button>
+          <button
+            type="button"
+            *ngIf="canGrantAccess"
+            [class.active]="isGrantSelected(profile.handle)"
+            [disabled]="profile.accessGranted"
+            (click)="toggleGrantSelection(profile)">
+            {{ profile.accessGranted ? 'Access granted' : isGrantSelected(profile.handle) ? 'Selected' : 'Select' }}
+          </button>
+        </div>
+      </article>
+    </div>
+
+    <div class="panel detail-panel" *ngIf="selectedProfile as profile">
+      <p class="kicker">Profile detail</p>
+      <h2>{{ profile.displayName }}</h2>
+      <p class="handle">@{{ profile.handle }}</p>
+      <p class="bio-preview">{{ profile.bio || 'No bio yet.' }}</p>
+      <div class="stats">
+        <span>{{ profile.followerCount }} followers</span>
+        <span>{{ profile.followingCount }} following</span>
+        <span *ngIf="profile.mutualConnection">Mutual connection</span>
+        <span *ngIf="profile.accessGranted">Access granted</span>
+      </div>
+      <div class="mini-posts" *ngIf="profile.recentPosts.length">
+        <article *ngFor="let post of profile.recentPosts; trackBy: trackByPost">
+          <p>{{ post.body }}</p>
+          <time>{{ post.createdAt | date:'short' }}</time>
+        </article>
+      </div>
+    </div>
+  </section>
+</main>
+
+<ng-template #loadingState>
+  <main class="social-page loading-state">
+    <section class="panel">
+      <p class="kicker">Social hub</p>
+      <h1>Loading your network...</h1>
+    </section>
+  </main>
+</ng-template>

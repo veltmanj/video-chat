@@ -1,1 +1,7 @@
-<router-outlet></router-outlet>
+<div class="app-shell">
+  <header class="topbar" *ngIf="auth.isAuthenticated">
+    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Room</a>
+    <a routerLink="/social" routerLinkActive="active">Social</a>
+  </header>
+  <router-outlet></router-outlet>
+</div>
