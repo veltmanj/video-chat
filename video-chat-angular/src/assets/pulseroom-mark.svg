@@ -1,0 +1,15 @@
+<svg width="256" height="176" viewBox="0 0 256 176" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="pulseGradient" x1="22" y1="18" x2="214" y2="131" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFB11F"/>
+      <stop offset="0.52" stop-color="#FF7A1A"/>
+      <stop offset="1" stop-color="#FF2D3D"/>
+    </linearGradient>
+  </defs>
+
+  <path d="M24 112H89L104 137L132 56L168 156L192 121H238" stroke="url(#pulseGradient)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M165 34C188 16 221 13 248 23C278 34 298 59 298 87C298 110 279 126 255 126H242V109H255C269 109 280 99 280 85C280 65 264 46 239 36C214 26 183 28 160 44L165 34Z" transform="translate(-70 0)" fill="url(#pulseGradient)"/>
+  <path d="M152 46H192C203 46 212 55 212 66V98L194 80H152C141 80 132 71 132 60C132 52 138 46 152 46Z" fill="url(#pulseGradient)"/>
+  <rect x="147" y="57" width="24" height="19" rx="5" fill="#111827"/>
+  <path d="M170 62L185 54V79L170 71V62Z" fill="#111827"/>
+</svg>

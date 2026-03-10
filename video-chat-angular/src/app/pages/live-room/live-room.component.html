@@ -1,7 +1,13 @@
 <main class="live-shell">
   <section class="control-bar">
     <div class="room-card">
-      <h1>PulseRoom Live</h1>
+      <div class="room-brand">
+        <img class="room-logo" src="assets/pulseroom-mark.svg" alt="PulseRoom">
+        <div>
+          <p class="room-kicker">PulseRoom</p>
+          <h1>PulseRoom Live</h1>
+        </div>
+      </div>
       <p>Angular 21 + RSocket broker mesh + multi-webcam control room</p>
       <div class="state" [class.state-connected]="connected">{{ connectionState }}</div>
     </div>

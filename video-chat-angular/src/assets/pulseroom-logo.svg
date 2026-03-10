@@ -1,0 +1,23 @@
+<svg width="720" height="220" viewBox="0 0 720 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="pulseGradient" x1="154" y1="24" x2="465" y2="145" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFB11F"/>
+      <stop offset="0.55" stop-color="#FF7A1A"/>
+      <stop offset="1" stop-color="#FF2D3D"/>
+    </linearGradient>
+    <filter id="softGlow" x="108" y="0" width="406" height="182" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0.35  0 0 1 0 0.12  0 0 0 0.35 0"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#softGlow)">
+    <path d="M150 124H246L266 164L304 57L352 184L384 135H463" stroke="url(#pulseGradient)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M347 42C377 21 420 17 455 30C495 44 522 78 522 115C522 147 496 168 464 168H447V145H464C483 145 498 132 498 112C498 85 477 59 444 46C412 33 372 35 343 56L347 42Z" fill="url(#pulseGradient)"/>
+    <path d="M396 58H448C462 58 474 70 474 84V123L452 101H396C382 101 370 89 370 75C370 65 377 58 396 58Z" fill="url(#pulseGradient)"/>
+    <rect x="390" y="73" width="34" height="27" rx="7" fill="#111827"/>
+    <path d="M423 80L443 69V104L423 92V80Z" fill="#111827"/>
+  </g>
+
+  <text x="84" y="214" fill="#F8FAFC" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="92" font-weight="700" letter-spacing="2">PULSEROOM</text>
+</svg>

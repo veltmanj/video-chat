@@ -25,6 +25,26 @@
   gap: 1.25rem;
 }
 
+.hero-lockup {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+}
+
+.hero-lockup img {
+  width: clamp(116px, 14vw, 156px);
+}
+
+.hero-wordmark {
+  margin: 0;
+  color: #f8fafc;
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 0.9;
+  text-transform: uppercase;
+}
+
 .eyebrow,
 .card-kicker,
 .signal-label,
@@ -35,23 +55,16 @@
   color: #7dd3fc;
 }
 
-.hero-panel h1,
-.login-card h2 {
+.hero-panel h1 {
   margin: 0;
   line-height: 0.95;
   letter-spacing: -0.04em;
-}
-
-.hero-panel h1 {
   max-width: 10ch;
   font-size: clamp(3rem, 7vw, 6rem);
 }
 
 .lead,
-.card-copy,
-.signal-grid p,
-.config-card p,
-.footnote {
+.config-card p {
   margin: 0;
   color: rgba(226, 232, 240, 0.82);
   line-height: 1.6;
@@ -90,10 +103,6 @@
   box-shadow: 0 32px 80px rgba(2, 6, 23, 0.45);
 }
 
-.card-copy {
-  margin-top: 0.9rem;
-}
-
 .status-callout {
   margin-top: 1.5rem;
   padding: 1rem 1.1rem;
@@ -123,9 +132,7 @@
   font-size: 1rem;
 }
 
-.config-card code,
-.footnote code,
-.card-copy code {
+.config-card code {
   font-family: 'IBM Plex Mono', 'SFMono-Regular', monospace;
   color: #fef08a;
 }
@@ -186,11 +193,6 @@
   width: 100%;
   height: 100%;
   display: block;
-}
-
-.provider-icon-apple,
-.provider-icon-x {
-  color: currentColor;
 }
 
 .login-button:hover:not(:disabled) {
@@ -275,6 +277,16 @@
 @media (max-width: 980px) {
   .login-page {
     grid-template-columns: 1fr;
+  }
+
+  .hero-lockup img {
+    width: 104px;
+  }
+
+  .hero-lockup {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.8rem;
   }
 
   .hero-panel h1 {

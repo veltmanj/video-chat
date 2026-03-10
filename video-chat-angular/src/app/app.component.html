@@ -1,7 +1,13 @@
 <div class="app-shell">
   <header class="topbar" *ngIf="auth.isAuthenticated">
-    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Room</a>
-    <a routerLink="/social" routerLinkActive="active">Social</a>
+    <a class="brand-link" routerLink="/">
+      <img src="assets/pulseroom-mark.svg" alt="PulseRoom">
+      <span>PulseRoom</span>
+    </a>
+    <nav class="topbar-nav" aria-label="Primary">
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Room</a>
+      <a routerLink="/social" routerLinkActive="active">Social</a>
+    </nav>
   </header>
   <router-outlet></router-outlet>
 </div>

@@ -12,14 +12,38 @@
   top: 0;
   z-index: 20;
   display: flex;
-  gap: 0.75rem;
-  padding: 0.9rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
   background: rgba(3, 7, 18, 0.72);
   backdrop-filter: blur(16px);
   border-bottom: 1px solid rgba(148, 163, 184, 0.16);
 }
 
-.topbar a {
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+  color: #f8fafc;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-decoration: none;
+}
+
+.brand-link img {
+  display: block;
+  width: 44px;
+  height: auto;
+}
+
+.topbar-nav {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.topbar-nav a {
   text-decoration: none;
   color: #cbd5e1;
   padding: 0.55rem 0.9rem;
@@ -27,7 +51,14 @@
   transition: background 180ms ease, color 180ms ease;
 }
 
-.topbar a.active {
+.topbar-nav a.active {
   background: rgba(56, 189, 248, 0.18);
   color: #f8fafc;
+}
+
+@media (max-width: 720px) {
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
