@@ -5,6 +5,12 @@ server:
 spring:
   application:
     name: video-chat-backoffice
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/videochat}
+    username: ${SPRING_DATASOURCE_USERNAME:videochat}
+    password: ${SPRING_DATASOURCE_PASSWORD:videochat}
+  flyway:
+    enabled: ${SPRING_FLYWAY_ENABLED:true}
   rsocket:
     server:
       transport: websocket
@@ -15,3 +21,12 @@ management:
     web:
       exposure:
         include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,info}
+
+backoffice:
+  social:
+    auth:
+      google-issuer: ${BACKOFFICE_SOCIAL_GOOGLE_ISSUER:https://accounts.google.com}
+      google-jwk-set-uri: ${BACKOFFICE_SOCIAL_GOOGLE_JWK_SET_URI:https://www.googleapis.com/oauth2/v3/certs}
+      google-audience: ${BACKOFFICE_SOCIAL_GOOGLE_AUDIENCE:}
+    feed-limit: ${BACKOFFICE_SOCIAL_FEED_LIMIT:50}
+    search-limit: ${BACKOFFICE_SOCIAL_SEARCH_LIMIT:20}

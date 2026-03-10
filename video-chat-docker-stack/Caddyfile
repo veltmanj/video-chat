@@ -52,13 +52,25 @@
 		lb_try_interval 250ms
 	}
 
-	handle_path /backoffice-api/* {
+	@backoffice_api path /backoffice-api/*
+	handle @backoffice_api {
+		@backoffice_api_disabled expression `{env.BACKOFFICE_API_EXPOSED} != "true"`
+		respond @backoffice_api_disabled 404
+		uri strip_prefix /backoffice-api
 		reverse_proxy backoffice:7901
 	}
 
 	@backoffice_rsocket path /backoffice-rsocket*
 	handle @backoffice_rsocket {
+		@backoffice_rsocket_disabled expression `{env.BACKOFFICE_RSOCKET_EXPOSED} != "true"`
+		respond @backoffice_rsocket_disabled 404
 		rewrite * /rsocket
+		reverse_proxy backoffice:7901
+	}
+
+	@social_api path /social-api*
+	handle @social_api {
+		uri strip_prefix /social-api
 		reverse_proxy backoffice:7901
 	}
 

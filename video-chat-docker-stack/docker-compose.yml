@@ -23,6 +23,23 @@ services:
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
       VIDEOCHAT_APP_MODE: ${VIDEOCHAT_APP_MODE:-production}
 
+  social-db:
+    <<: *service-defaults
+    image: ${SOCIAL_DB_IMAGE:-postgres:16-alpine}
+    container_name: ${SOCIAL_DB_CONTAINER_NAME:-videochat-social-db}
+    environment:
+      POSTGRES_DB: ${SOCIAL_DB_NAME:-videochat}
+      POSTGRES_USER: ${SOCIAL_DB_USER:-videochat}
+      POSTGRES_PASSWORD: ${SOCIAL_DB_PASSWORD:-videochat}
+    healthcheck:
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+      test: ["CMD-SHELL", "pg_isready -U ${SOCIAL_DB_USER:-videochat} -d ${SOCIAL_DB_NAME:-videochat}"]
+    volumes:
+      - social-db-data:/var/lib/postgresql/data
+
   vault:
     <<: *service-defaults
     image: ${VAULT_IMAGE:-hashicorp/vault:1.17}
@@ -81,6 +98,7 @@ services:
       BROKER_BACKOFFICE_ENDPOINT: ws://backoffice:7901/rsocket
       BROKER_JWT_ENABLED: ${BROKER_JWT_ENABLED:-true}
       BROKER_JWT_CACHE_TTL: ${BROKER_JWT_CACHE_TTL:-15m}
+      BROKER_JWT_CLOCK_SKEW: ${BROKER_JWT_CLOCK_SKEW:-30s}
       BROKER_JWT_VAULT_URI: http://vault:8200
       BROKER_JWT_VAULT_TOKEN: ${VAULT_DEV_ROOT_TOKEN_ID:-videochat-dev-root-token}
       BROKER_JWT_VAULT_KV_MOUNT: ${VAULT_KV_MOUNT:-secret}
@@ -93,18 +111,19 @@ services:
                   "enabled": ${BROKER_JWT_GOOGLE_ENABLED:-true},
                   "name": "google",
                   "issuers": ["https://accounts.google.com", "accounts.google.com"],
+                  "audiences": ["${BROKER_JWT_GOOGLE_AUDIENCE:-}"],
                   "vaultPath": "${VAULT_GOOGLE_SECRET_PATH:-jwt/providers/google}",
                   "vaultField": "${VAULT_PROVIDER_FIELD:-jwks_json}"
                 },
                 {
-                  "enabled": ${BROKER_JWT_APPLE_ENABLED:-true},
+                  "enabled": ${BROKER_JWT_APPLE_ENABLED:-false},
                   "name": "apple",
                   "issuers": ["https://appleid.apple.com"],
                   "vaultPath": "${VAULT_APPLE_SECRET_PATH:-jwt/providers/apple}",
                   "vaultField": "${VAULT_PROVIDER_FIELD:-jwks_json}"
                 },
                 {
-                  "enabled": ${BROKER_JWT_X_ENABLED:-true},
+                  "enabled": ${BROKER_JWT_X_ENABLED:-false},
                   "name": "x",
                   "vaultPath": "${VAULT_X_SECRET_PATH:-jwt/providers/x}",
                   "vaultField": "${VAULT_PROVIDER_FIELD:-jwks_json}"
@@ -122,6 +141,14 @@ services:
     build:
       context: ../video-chat-backoffice
     container_name: ${BACKOFFICE_CONTAINER_NAME:-videochat-backoffice}
+    depends_on:
+      social-db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://social-db:5432/${SOCIAL_DB_NAME:-videochat}
+      SPRING_DATASOURCE_USERNAME: ${SOCIAL_DB_USER:-videochat}
+      SPRING_DATASOURCE_PASSWORD: ${SOCIAL_DB_PASSWORD:-videochat}
+      BACKOFFICE_SOCIAL_GOOGLE_AUDIENCE: ${BACKOFFICE_SOCIAL_GOOGLE_AUDIENCE:-}
     healthcheck:
       <<: *http-healthcheck
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:7901/actuator/health >/dev/null || exit 1"]
@@ -145,6 +172,8 @@ services:
     environment:
       VIDEOCHAT_HOST: ${VIDEOCHAT_HOST:-localhost}
       CADDY_LOCAL_CA_FILENAME: ${CADDY_LOCAL_CA_FILENAME:-caddy-local-root-ca.crt}
+      BACKOFFICE_API_EXPOSED: ${BACKOFFICE_API_EXPOSED:-false}
+      BACKOFFICE_RSOCKET_EXPOSED: ${BACKOFFICE_RSOCKET_EXPOSED:-false}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./${CADDY_LOCAL_CA_FILENAME:-caddy-local-root-ca.crt}:/srv/local-ca.crt:ro
@@ -158,3 +187,4 @@ networks:
 volumes:
   caddy-data:
   caddy-config:
+  social-db-data:

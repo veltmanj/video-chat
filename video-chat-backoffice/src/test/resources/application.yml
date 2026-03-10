@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:backoffice;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+  rsocket:
+    server:
+      transport: websocket
+      mapping-path: /rsocket
+
+backoffice:
+  social:
+    auth:
+      google-audience: test-audience
