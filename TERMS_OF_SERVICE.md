@@ -8,7 +8,7 @@ This document is a minimal operational draft for the stack and is not legal advi
 
 ## 1. Acceptance
 
-By accessing or using the service, you agree to these Terms of Service, the [Acceptable Use Policy](ACCEPTABLE_USE_POLICY.md), and the [Cookie Policy](COOKIE_POLICY.md).
+By accessing or using the service, you agree to these Terms of Service, the [Privacy Policy](PRIVACY_POLICY.md), the [Acceptable Use Policy](ACCEPTABLE_USE_POLICY.md), and the [Cookie Policy](COOKIE_POLICY.md).
 
 If you do not agree, do not use the service.
 
@@ -52,9 +52,9 @@ The operator may remove, restrict, review, or preserve content where reasonably 
 
 ## 7. Privacy and cookies
 
-Use of the service may involve session storage, authentication tokens, log records, and provider-managed cookies required for sign-in.
+Use of the service may involve session storage, authentication tokens, provider-supplied identity data, profile data, log records, and provider-managed cookies required for sign-in.
 
-See the Cookie Policy for the current storage model. Operators should also publish a service-specific privacy policy before public launch.
+See the [Privacy Policy](PRIVACY_POLICY.md) and [Cookie Policy](COOKIE_POLICY.md) for the current data handling and storage model.
 
 ## 8. Third-party services
 

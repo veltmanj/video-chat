@@ -54,8 +54,10 @@ describe('LoginComponent', () => {
     const hrefs = links.map((link) => link.getAttribute('href'));
 
     expect(text).toContain('Terms of Service');
+    expect(text).toContain('Privacy Policy');
     expect(text).toContain('Acceptable Use Policy');
     expect(text).toContain('Cookie Policy');
+    expect(hrefs).toContain('/privacy');
     expect(hrefs).toContain('/terms');
     expect(hrefs).toContain('/acceptable-use');
     expect(hrefs).toContain('/cookies');

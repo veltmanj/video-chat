@@ -3,51 +3,47 @@ import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 @Component({
-  selector: 'app-terms-of-service',
+  selector: 'app-privacy-policy',
   standalone: true,
   imports: [CommonModule, RouterLink],
   template: `
     <main class="policy-page">
       <section class="policy-card">
         <p class="policy-kicker">Legal</p>
-        <h1>Terms of Service</h1>
-        <p class="policy-meta">Last updated: March 9, 2026</p>
+        <h1>Privacy Policy</h1>
+        <p class="policy-meta">Last updated: March 10, 2026</p>
 
         <p>
-          These terms govern access to PulseRoom and the related real-time room services exposed by this stack.
-          By using the service, you agree to these terms, the Privacy Policy, the Acceptable Use Policy,
-          and the Cookie Policy.
+          PulseRoom processes only the data needed to sign users in, provide room access, and support the
+          current social profile features exposed by this stack. This page summarizes the current implementation
+          and should be reviewed by the operator before public launch.
         </p>
 
-        <h2>Use of the service</h2>
-        <p>
-          You may use the service only for lawful, authorized communication and collaboration. You are responsible
-          for your account, your content, and the way you use supported sign-in providers and room features.
-        </p>
+        <h2>Data we may process</h2>
+        <ul>
+          <li>Identity-provider data such as your account subject, email address, display name, and avatar URL when supplied.</li>
+          <li>Profile and social data such as handle, biography, visibility setting, follows, access grants, posts, and reactions.</li>
+          <li>Authentication and session data such as OAuth state, nonce values, ID tokens, access tokens, and room authorization tokens.</li>
+          <li>Operational and security records reasonably needed to run, protect, and troubleshoot the service.</li>
+        </ul>
 
-        <h2>Availability</h2>
+        <h2>Why this data is used</h2>
         <p>
-          The service may change, be interrupted, or be discontinued at any time. No guarantee is given that the
-          service will be uninterrupted, error-free, or suitable for every use case.
-        </p>
-
-        <h2>Content and enforcement</h2>
-        <p>
-          The operator may remove content, restrict access, suspend rooms, or terminate accounts where reasonably
-          necessary to enforce platform rules, protect users, respond to abuse, or comply with law.
+          The current stack uses this data to authenticate users, create and maintain profiles, deliver room and
+          social features, validate access, investigate abuse, and keep the service available.
         </p>
 
         <h2>Third-party providers</h2>
         <p>
-          Sign-in and infrastructure may rely on third-party providers. Their services are governed by their own
-          terms and policies.
+          Sign-in may rely on providers such as Google, and deployments may rely on hosting or infrastructure
+          providers selected by the operator. Those services operate under their own terms and privacy practices.
         </p>
 
-        <h2>Disclaimers and liability</h2>
+        <h2>Retention and operator review</h2>
         <p>
-          The service is provided on an "as is" and "as available" basis to the maximum extent permitted by law.
-          Operators and contributors disclaim warranties to the maximum extent permitted by law. Nothing on this
-          page should be treated as finalized legal advice without operator review.
+          Data may be retained for active service use, security review, and operator-managed backups. This
+          repository does not yet provide a complete production deletion workflow, so operators should define
+          retention periods, support contacts, and jurisdiction-specific rights handling before public launch.
         </p>
 
         <a class="back-link" routerLink="/login">Back to sign in</a>
@@ -93,7 +89,8 @@ import { RouterLink } from '@angular/router';
 
     h1,
     h2,
-    p {
+    p,
+    ul {
       margin: 0;
     }
 
@@ -114,10 +111,15 @@ import { RouterLink } from '@angular/router';
       color: #f8fafc;
     }
 
-    p {
+    p,
+    li {
       margin-top: 0.75rem;
       line-height: 1.65;
       color: rgba(226, 232, 240, 0.84);
+    }
+
+    ul {
+      padding-left: 1.2rem;
     }
 
     .back-link {
@@ -133,4 +135,4 @@ import { RouterLink } from '@angular/router';
     }
   `]
 })
-export class TermsOfServiceComponent {}
+export class PrivacyPolicyComponent {}

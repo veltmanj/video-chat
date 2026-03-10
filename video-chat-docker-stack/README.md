@@ -44,6 +44,24 @@ Bring the stack up in development mode:
 ./scripts/up-dev.sh
 ```
 
+Back up the social database:
+
+```bash
+./scripts/backup-social-db.sh
+```
+
+Reload a dump into the running local social database:
+
+```bash
+./scripts/restore-social-db.sh ./backups/social-db-<timestamp>.dump
+```
+
+Reload a production dump into the isolated dev database:
+
+```bash
+./scripts/reload-prod-social-db.sh ./backups/social-db-<timestamp>.dump
+```
+
 Stop it:
 
 ```bash
@@ -83,8 +101,12 @@ Key variables:
 - `VAULT_IMAGE`: Vault image tag, defaults to `hashicorp/vault:1.17`
 - `VAULT_DEV_ROOT_TOKEN_ID`: local Vault token shared by the bootstrap job and broker
 - `VAULT_GOOGLE_JWKS_URL`, `VAULT_APPLE_JWKS_URL`, `VAULT_X_JWKS_URL`: JWKS sources written into Vault
-- `BROKER_JWT_*`: broker JWT validation toggles and cache settings
+- `BROKER_JWT_*`: broker JWT validation toggles, provider enablement, and cache settings
 - `BROKER_JWT_GOOGLE_AUDIENCE`: optional Google audience pin for broker JWT validation; set this to the same value as `GOOGLE_OAUTH_CLIENT_ID`
+- `BACKOFFICE_SOCIAL_GOOGLE_AUDIENCE`: optional Google audience pin used by the social REST APIs
+- `SOCIAL_DB_*`: social database image, credentials, and active persistent volume name
+- `SOCIAL_DB_DEV_*`: isolated development database, container, and volume names used by `./scripts/up-dev.sh`
+- `SOCIAL_DB_SEED_*`: development seed controls; set `SOCIAL_DB_SEED_FORCE=true` to rebuild the sample dataset
 
 Security drill:
 
@@ -137,7 +159,19 @@ Start it with:
 ./scripts/up-dev.sh
 ```
 
-This runs the stack with `VIDEOCHAT_APP_MODE=development` for that compose invocation. It does not overwrite your `.env` file.
+This runs the stack with `VIDEOCHAT_APP_MODE=development` for that compose invocation. It also switches the social database to an isolated dev database and volume, then seeds 15 sample profiles with follows, private-profile grants, posts, and reactions. If the social schema does not exist yet, the seed job applies the SQL migrations before loading the sample dataset. It does not overwrite your `.env` file.
+
+To rebuild the dev sample data:
+
+```bash
+SOCIAL_DB_SEED_FORCE=true ./scripts/up-dev.sh
+```
+
+To replace the seeded dataset with a production backup inside the isolated dev database:
+
+```bash
+./scripts/reload-prod-social-db.sh ./backups/social-db-<timestamp>.dump
+```
 
 ## Vault-backed JWT validation
 

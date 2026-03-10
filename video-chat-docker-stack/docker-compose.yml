@@ -40,6 +40,30 @@ services:
     volumes:
       - social-db-data:/var/lib/postgresql/data
 
+  social-db-seed:
+    <<: *job-defaults
+    profiles:
+      - dev-seed
+    image: ${SOCIAL_DB_IMAGE:-postgres:16-alpine}
+    container_name: ${SOCIAL_DB_SEED_CONTAINER_NAME:-videochat-social-db-seed}
+    depends_on:
+      social-db:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["/bin/sh", "/seed/scripts/seed-dev-social-db.sh"]
+    environment:
+      PGHOST: social-db
+      PGPORT: 5432
+      PGDATABASE: ${SOCIAL_DB_NAME:-videochat}
+      PGUSER: ${SOCIAL_DB_USER:-videochat}
+      PGPASSWORD: ${SOCIAL_DB_PASSWORD:-videochat}
+      SOCIAL_DB_SEED_ENABLED: ${SOCIAL_DB_SEED_ENABLED:-false}
+      SOCIAL_DB_SEED_FORCE: ${SOCIAL_DB_SEED_FORCE:-false}
+    volumes:
+      - ./scripts:/seed/scripts:ro
+      - ./db:/seed/db:ro
+      - ../video-chat-backoffice/src/main/resources/db/migration:/seed/backoffice-migrations:ro
+
   vault:
     <<: *service-defaults
     image: ${VAULT_IMAGE:-hashicorp/vault:1.17}
@@ -188,3 +212,4 @@ volumes:
   caddy-data:
   caddy-config:
   social-db-data:
+    name: ${SOCIAL_DB_VOLUME_NAME:-social-db-data}

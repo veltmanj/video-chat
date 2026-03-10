@@ -83,6 +83,8 @@ Start everything in development mode:
 ./scripts/up-dev.sh
 ```
 
+This uses an isolated social database name and volume for development and runs a one-shot seed job with 15 sample profiles. If the social schema is not present yet, the seed job applies the SQL migrations first.
+
 Stop everything:
 
 ```bash
@@ -114,21 +116,27 @@ Key variables:
 - `VAULT_GOOGLE_SECRET_PATH`, `VAULT_APPLE_SECRET_PATH`, `VAULT_X_SECRET_PATH`: Vault secret paths used by the broker
 - `VAULT_GOOGLE_JWKS_URL`, `VAULT_APPLE_JWKS_URL`, `VAULT_X_JWKS_URL`: JWKS bootstrap URLs
 - `BROKER_JWT_ENABLED`, `BROKER_JWT_CACHE_TTL`, `BROKER_JWT_CLOCK_SKEW`: broker JWT validation controls
+- `SOCIAL_DB_IMAGE`, `SOCIAL_DB_CONTAINER_NAME`, `SOCIAL_DB_NAME`, `SOCIAL_DB_USER`, `SOCIAL_DB_PASSWORD`: primary social database settings
+- `SOCIAL_DB_VOLUME_NAME`: active social database volume name
+- `SOCIAL_DB_SEED_CONTAINER_NAME`, `SOCIAL_DB_SEED_ENABLED`, `SOCIAL_DB_SEED_FORCE`: development seed job controls
+- `SOCIAL_DB_DEV_NAME`, `SOCIAL_DB_DEV_CONTAINER_NAME`, `SOCIAL_DB_DEV_VOLUME_NAME`, `SOCIAL_DB_DEV_SEED_CONTAINER_NAME`: isolated dev social database settings
 - `BROKER_JWT_GOOGLE_ENABLED`, `BROKER_JWT_APPLE_ENABLED`, `BROKER_JWT_X_ENABLED`: per-provider broker toggles
 - `BROKER_JWT_GOOGLE_AUDIENCE`: optional Google audience pin; usually set this equal to `GOOGLE_OAUTH_CLIENT_ID`
+- `BACKOFFICE_SOCIAL_GOOGLE_AUDIENCE`: optional Google audience pin used by the social REST APIs
 
 Recommended defaults:
 
 - Keep `BROKER_JWT_GOOGLE_ENABLED=true` for the Google login flow.
 - Keep `BROKER_JWT_APPLE_ENABLED=false` and `BROKER_JWT_X_ENABLED=false` unless those providers are actually configured and in use.
 - Set `BROKER_JWT_GOOGLE_AUDIENCE` to the same value as `GOOGLE_OAUTH_CLIENT_ID` once the client ID is known.
+- Leave `SOCIAL_DB_SEED_ENABLED=false` in `.env`; `./scripts/up-dev.sh` enables it only for the dev-mode startup invocation.
 
 ### 5.2 `docker-compose.yml`
 
 Responsibilities:
 
 - builds the frontend, broker, and backoffice from sibling repos
-- starts a local Vault dev server and a one-shot JWKS bootstrap job
+- starts a local Vault dev server, a one-shot JWKS bootstrap job, and an optional dev-only social seed job
 - attaches all services to the shared `videochat-network`
 - waits for Vault bootstrap, broker, and backoffice health checks before starting Caddy
 - mounts the Caddy config and exported local CA certificate
@@ -199,6 +207,36 @@ Start the stack with frontend development diagnostics enabled:
 
 ```bash
 ./scripts/up-dev.sh
+```
+
+Force a fresh dev social dataset:
+
+```bash
+SOCIAL_DB_SEED_FORCE=true ./scripts/up-dev.sh
+```
+
+Back up the running social database:
+
+```bash
+./scripts/backup-social-db.sh
+```
+
+Restore a dump into the current running social database:
+
+```bash
+./scripts/restore-social-db.sh ./backups/social-db-<timestamp>.dump
+```
+
+Restore a production dump into a different local database name:
+
+```bash
+./scripts/restore-social-db.sh ./backups/prod.dump videochat_dev
+```
+
+Restore a production dump directly into the isolated dev database:
+
+```bash
+./scripts/reload-prod-social-db.sh ./backups/prod.dump
 ```
 
 Update the frontend with a Google OAuth client ID and rebuild only that service:

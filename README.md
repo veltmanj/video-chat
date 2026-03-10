@@ -45,5 +45,6 @@ npm start
 - License selection and notes: [LICENSING.md](LICENSING.md)
 - License text: [LICENSE](LICENSE)
 - Terms of Service draft: [TERMS_OF_SERVICE.md](TERMS_OF_SERVICE.md)
+- Privacy Policy draft: [PRIVACY_POLICY.md](PRIVACY_POLICY.md)
 - Acceptable Use Policy draft: [ACCEPTABLE_USE_POLICY.md](ACCEPTABLE_USE_POLICY.md)
 - Cookie Policy draft: [COOKIE_POLICY.md](COOKIE_POLICY.md)
