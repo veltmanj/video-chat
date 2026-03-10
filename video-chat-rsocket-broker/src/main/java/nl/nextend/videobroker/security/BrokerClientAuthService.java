@@ -15,8 +15,9 @@ public class BrokerClientAuthService {
     }
 
     public void requireAuthorized(String providedToken) {
-        if (!jwtValidatorService.validate(providedToken)) {
-            throw new SecurityException("Unauthorized broker client");
+        JwtValidatorService.ValidationResult result = jwtValidatorService.validateDetailed(providedToken);
+        if (!result.valid()) {
+            throw new SecurityException(result.reason());
         }
     }
 }

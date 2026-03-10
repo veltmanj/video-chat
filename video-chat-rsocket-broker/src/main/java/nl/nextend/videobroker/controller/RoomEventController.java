@@ -11,6 +11,10 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.stereotype.Controller;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
+import reactor.core.publisher.SignalType;
+
+import java.util.Map;
 
 @Controller
 /**
@@ -32,15 +36,18 @@ public class RoomEventController {
     /**
      * Validates the supplied bearer token so clients fail before opening the live stream.
      */
-    public Mono<Void> authorize(RoomStreamRequest request) {
+    public Mono<Map<String, String>> authorize(RoomStreamRequest request) {
         if (request == null) {
             log.warn("Authorize route invoked without a request payload");
-            return Mono.empty();
+            return Mono.just(Map.of("status", "ignored"));
         }
 
-        brokerClientAuthService.requireAuthorized(request.authToken());
-        log.info("Authorization accepted: roomId={}, clientId={}", request.roomId(), request.clientLabel());
-        return Mono.empty();
+        return Mono.fromRunnable(() -> brokerClientAuthService.requireAuthorized(request.authToken()))
+            .subscribeOn(Schedulers.boundedElastic())
+            .thenReturn(Map.of("status", "authorized"))
+            .doOnNext(ignored ->
+                log.info("Authorization accepted: roomId={}, clientId={}", request.roomId(), request.clientLabel())
+            );
     }
 
     @MessageMapping("room.events.publish")
@@ -53,15 +60,15 @@ public class RoomEventController {
             return Mono.empty();
         }
 
-        brokerClientAuthService.requireAuthorized(request.authToken());
-
-        brokerService.publish(request.event())
-            .ifPresentOrElse(
-                this::logPublishedEvent,
-                () -> log.warn("Publish route invoked with an invalid room event")
-            );
-
-        return Mono.empty();
+        return Mono.fromRunnable(() -> brokerClientAuthService.requireAuthorized(request.authToken()))
+            .subscribeOn(Schedulers.boundedElastic())
+            .then(Mono.fromRunnable(() ->
+                brokerService.publish(request.event())
+                    .ifPresentOrElse(
+                        this::logPublishedEvent,
+                        () -> log.warn("Publish route invoked with an invalid room event")
+                    )
+            ));
     }
 
     @MessageMapping("room.events.stream")
@@ -74,15 +81,61 @@ public class RoomEventController {
             return Flux.empty();
         }
 
-        brokerClientAuthService.requireAuthorized(request.authToken());
+        return Mono.fromRunnable(() -> brokerClientAuthService.requireAuthorized(request.authToken()))
+            .subscribeOn(Schedulers.boundedElastic())
+            .thenMany(Flux.defer(() -> {
+                log.info("Stream subscribe: roomId={}, clientId={}", request.roomId(), request.clientLabel());
+                return brokerService.subscribe(request.roomId())
+                    .filter(event -> shouldDeliverToClient(event, request.clientLabel()))
+                    .doOnCancel(() -> log.info("Stream cancel: roomId={}, clientId={}", request.roomId(), request.clientLabel()))
+                    .doOnComplete(() -> log.info("Stream complete: roomId={}, clientId={}", request.roomId(), request.clientLabel()))
+                    .doFinally(signalType -> unregisterDisconnectedClient(request, signalType));
+            }));
+    }
 
-        log.info("Stream subscribe: roomId={}, clientId={}", request.roomId(), request.clientLabel());
-        return brokerService.subscribe(request.roomId())
-            .doOnCancel(() -> log.info("Stream cancel: roomId={}, clientId={}", request.roomId(), request.clientLabel()))
-            .doOnComplete(() -> log.info("Stream complete: roomId={}, clientId={}", request.roomId(), request.clientLabel()));
+    private void unregisterDisconnectedClient(RoomStreamRequest request, SignalType signalType) {
+        if (signalType == SignalType.ON_ERROR || !request.hasRoomId()) {
+            return;
+        }
+
+        brokerService.unregisterClient(request.roomId(), request.clientLabel())
+            .ifPresent(event -> log.info(
+                "Removed disconnected client from room snapshot: roomId={}, clientId={}, signal={}",
+                event.roomId(),
+                event.senderId(),
+                signalType
+            ));
     }
 
     private void logPublishedEvent(RoomEventMessage event) {
+        if ("WEBRTC_SIGNAL".equals(event.type())) {
+            Object targetClientId = event.payload().get("targetClientId");
+            Object signal = event.payload().get("signal");
+            String descriptionType = signal instanceof Map<?, ?> signalMap
+                && signalMap.get("description") instanceof Map<?, ?> descriptionMap
+                && descriptionMap.get("type") instanceof String type
+                ? type
+                : (signal instanceof Map<?, ?> signalMap && signalMap.containsKey("candidate") ? "candidate" : "unknown");
+            log.info(
+                "Published event type={} room={} sender={} target={} signal={}",
+                event.type(),
+                event.roomId(),
+                event.senderId(),
+                targetClientId,
+                descriptionType
+            );
+            return;
+        }
+
         log.info("Published event type={} room={} sender={}", event.type(), event.roomId(), event.senderId());
+    }
+
+    private boolean shouldDeliverToClient(RoomEventMessage event, String clientId) {
+        if (event == null || !"WEBRTC_SIGNAL".equals(event.type())) {
+            return true;
+        }
+
+        Object targetClientId = event.payload().get("targetClientId");
+        return targetClientId instanceof String target && target.equals(clientId);
     }
 }

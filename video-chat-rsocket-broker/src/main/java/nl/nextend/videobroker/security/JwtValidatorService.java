@@ -8,6 +8,8 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jwt.SignedJWT;
 import nl.nextend.videobroker.config.BrokerJwtProperties;
 import nl.nextend.videobroker.config.BrokerJwtProperties.Provider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -24,6 +26,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class JwtValidatorService {
+    private static final Logger log = LoggerFactory.getLogger(JwtValidatorService.class);
 
     private final BrokerJwtProperties properties;
     private final VaultJwkSetService vaultJwkSetService;
@@ -41,32 +44,44 @@ public class JwtValidatorService {
     }
 
     public boolean validate(String token) {
+        return validateDetailed(token).valid();
+    }
+
+    ValidationResult validateDetailed(String token) {
         if (!properties.isEnabled()) {
-            return true;
+            return ValidationResult.success();
         }
 
         if (!StringUtils.hasText(token)) {
-            return false;
+            return ValidationResult.failure("Unauthorized broker client: missing broker JWT.");
         }
 
         try {
             SignedJWT jwt = SignedJWT.parse(token);
             List<Provider> candidates = resolveCandidateProviders(jwt);
             if (candidates.isEmpty()) {
-                return false;
+                return ValidationResult.failure(String.format(
+                    "Unauthorized broker client: no configured JWT provider matched issuer=%s.",
+                    safeClaim(jwt.getJWTClaimsSet().getIssuer())
+                ));
             }
 
+            String lastFailure = "Unauthorized broker client: JWT validation failed.";
             for (Provider provider : candidates) {
-                if (verifyWithProvider(jwt, provider)) {
-                    return true;
+                ValidationResult providerResult = verifyWithProvider(jwt, provider);
+                if (providerResult.valid()) {
+                    return providerResult;
                 }
+
+                lastFailure = providerResult.reason();
             }
 
-            return false;
+            return ValidationResult.failure(lastFailure);
         } catch (ParseException e) {
-            return false;
-        } catch (Exception ignored) {
-            return false;
+            return ValidationResult.failure("Unauthorized broker client: supplied token is not a valid JWT.");
+        } catch (Exception exception) {
+            log.warn("JWT validation failed unexpectedly", exception);
+            return ValidationResult.failure("Unauthorized broker client: JWT validation failed unexpectedly.");
         }
     }
 
@@ -99,21 +114,38 @@ public class JwtValidatorService {
             .toList();
     }
 
-    private boolean verifyWithProvider(SignedJWT jwt, Provider provider) {
+    private ValidationResult verifyWithProvider(SignedJWT jwt, Provider provider) {
         try {
             JWKSet jwkSet = vaultJwkSetService.load(provider);
+            String keyId = jwt.getHeader().getKeyID();
+            String lastFailure = String.format(
+                "Unauthorized broker client: signature verification failed for provider=%s kid=%s.",
+                provider.getName(),
+                safeClaim(keyId)
+            );
+
             for (RSAKey rsaKey : selectCandidateKeys(jwkSet, jwt.getHeader().getKeyID())) {
                 RSAPublicKey publicKey = rsaKey.toRSAPublicKey();
                 JWSVerifier verifier = new RSASSAVerifier(publicKey);
-                if (jwt.verify(verifier) && validateClaims(jwt, provider)) {
-                    return true;
+                if (!jwt.verify(verifier)) {
+                    continue;
                 }
-            }
-        } catch (Exception ignored) {
-            return false;
-        }
 
-        return false;
+                ValidationResult claimsResult = validateClaims(jwt, provider);
+                if (claimsResult.valid()) {
+                    return claimsResult;
+                }
+
+                lastFailure = claimsResult.reason();
+            }
+            return ValidationResult.failure(lastFailure);
+        } catch (Exception exception) {
+            log.warn("JWT verification failed for provider={}", provider.getName(), exception);
+            return ValidationResult.failure(String.format(
+                "Unauthorized broker client: JWT verification failed for provider=%s.",
+                provider.getName()
+            ));
+        }
     }
 
     private List<RSAKey> selectCandidateKeys(JWKSet jwkSet, String keyId) {
@@ -139,22 +171,46 @@ public class JwtValidatorService {
             && tokenIssuer.trim().toLowerCase(Locale.ROOT).equals(configuredIssuer.trim().toLowerCase(Locale.ROOT));
     }
 
-    private boolean validateClaims(SignedJWT jwt, Provider provider) throws ParseException {
+    private ValidationResult validateClaims(SignedJWT jwt, Provider provider) throws ParseException {
         var claims = jwt.getJWTClaimsSet();
 
         if (!hasValidIssuer(claims.getIssuer(), provider)) {
-            return false;
+            return ValidationResult.failure(String.format(
+                "Unauthorized broker client: issuer mismatch for provider=%s expected=%s actual=%s.",
+                provider.getName(),
+                provider.getIssuers(),
+                safeClaim(claims.getIssuer())
+            ));
         }
 
         if (!hasValidAudience(claims.getAudience(), provider)) {
-            return false;
+            return ValidationResult.failure(String.format(
+                "Unauthorized broker client: audience mismatch for provider=%s expected=%s actual=%s.",
+                provider.getName(),
+                provider.getAudiences(),
+                claims.getAudience()
+            ));
         }
 
         if (!StringUtils.hasText(claims.getSubject())) {
-            return false;
+            return ValidationResult.failure(String.format(
+                "Unauthorized broker client: subject missing for provider=%s.",
+                provider.getName()
+            ));
         }
 
-        return hasValidTimestamps(claims.getExpirationTime(), claims.getNotBeforeTime(), claims.getIssueTime());
+        if (!hasValidTimestamps(claims.getExpirationTime(), claims.getNotBeforeTime(), claims.getIssueTime())) {
+            return ValidationResult.failure(String.format(
+                "Unauthorized broker client: token timestamps are not valid for provider=%s exp=%s nbf=%s iat=%s now=%s.",
+                provider.getName(),
+                claims.getExpirationTime(),
+                claims.getNotBeforeTime(),
+                claims.getIssueTime(),
+                Instant.now(clock)
+            ));
+        }
+
+        return ValidationResult.success();
     }
 
     private boolean hasValidIssuer(String issuer, Provider provider) {
@@ -205,5 +261,19 @@ public class JwtValidatorService {
     private boolean isSigningKey(RSAKey key) {
         KeyUse keyUse = key.getKeyUse();
         return keyUse == null || KeyUse.SIGNATURE.equals(keyUse);
+    }
+
+    private String safeClaim(String value) {
+        return StringUtils.hasText(value) ? value : "<empty>";
+    }
+
+    record ValidationResult(boolean valid, String reason) {
+        static ValidationResult success() {
+            return new ValidationResult(true, "");
+        }
+
+        static ValidationResult failure(String reason) {
+            return new ValidationResult(false, reason);
+        }
     }
 }
