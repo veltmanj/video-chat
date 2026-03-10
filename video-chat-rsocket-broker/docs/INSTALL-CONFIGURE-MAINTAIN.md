@@ -59,6 +59,7 @@ Primary settings:
 - `BROKER_RSOCKET_MAPPING_PATH`: RSocket WebSocket path, default `/rsocket`
 - `BROKER_JWT_ENABLED`: enable JWT validation for authorize, publish, and stream requests, default `false`
 - `BROKER_JWT_CACHE_TTL`: how long JWKS documents stay cached after a Vault read, default `15m`
+- `BROKER_JWT_CLOCK_SKEW`: tolerated clock skew when validating `exp`, `nbf`, and `iat`, default `30s`
 - `BROKER_JWT_VAULT_URI`: Vault base URI, default `http://localhost:8200`
 - `BROKER_JWT_VAULT_TOKEN`: Vault token used for provider secret reads
 - `BROKER_JWT_VAULT_KV_MOUNT`: Vault KV-v2 mount, default `secret`
@@ -90,6 +91,7 @@ SPRING_APPLICATION_JSON='{
         {
           "name": "google",
           "issuers": ["https://accounts.google.com", "accounts.google.com"],
+          "audiences": ["your-google-web-client-id"],
           "vaultPath": "jwt/providers/google",
           "vaultField": "jwks_json"
         }

@@ -84,6 +84,13 @@ Key variables:
 - `VAULT_DEV_ROOT_TOKEN_ID`: local Vault token shared by the bootstrap job and broker
 - `VAULT_GOOGLE_JWKS_URL`, `VAULT_APPLE_JWKS_URL`, `VAULT_X_JWKS_URL`: JWKS sources written into Vault
 - `BROKER_JWT_*`: broker JWT validation toggles and cache settings
+- `BROKER_JWT_GOOGLE_AUDIENCE`: optional Google audience pin for broker JWT validation; set this to the same value as `GOOGLE_OAUTH_CLIENT_ID`
+
+Security drill:
+
+- Run `./scripts/security-drill.sh` to execute live negative-auth probes against the broker.
+- If the drill detects an auth bypass, it auto-applies the obvious mitigations, rebuilds the broker, and re-tests.
+- If the stack still accepts the malicious probes after mitigation, the script stops `broker` and `caddy` to contain exposure.
 
 ## Google OAuth
 

@@ -113,8 +113,15 @@ Key variables:
 - `VAULT_PROVIDER_FIELD`: field name used to store JWKS JSON, default `jwks_json`
 - `VAULT_GOOGLE_SECRET_PATH`, `VAULT_APPLE_SECRET_PATH`, `VAULT_X_SECRET_PATH`: Vault secret paths used by the broker
 - `VAULT_GOOGLE_JWKS_URL`, `VAULT_APPLE_JWKS_URL`, `VAULT_X_JWKS_URL`: JWKS bootstrap URLs
-- `BROKER_JWT_ENABLED`, `BROKER_JWT_CACHE_TTL`: broker JWT validation controls
+- `BROKER_JWT_ENABLED`, `BROKER_JWT_CACHE_TTL`, `BROKER_JWT_CLOCK_SKEW`: broker JWT validation controls
 - `BROKER_JWT_GOOGLE_ENABLED`, `BROKER_JWT_APPLE_ENABLED`, `BROKER_JWT_X_ENABLED`: per-provider broker toggles
+- `BROKER_JWT_GOOGLE_AUDIENCE`: optional Google audience pin; usually set this equal to `GOOGLE_OAUTH_CLIENT_ID`
+
+Recommended defaults:
+
+- Keep `BROKER_JWT_GOOGLE_ENABLED=true` for the Google login flow.
+- Keep `BROKER_JWT_APPLE_ENABLED=false` and `BROKER_JWT_X_ENABLED=false` unless those providers are actually configured and in use.
+- Set `BROKER_JWT_GOOGLE_AUDIENCE` to the same value as `GOOGLE_OAUTH_CLIENT_ID` once the client ID is known.
 
 ### 5.2 `docker-compose.yml`
 
@@ -125,6 +132,16 @@ Responsibilities:
 - attaches all services to the shared `videochat-network`
 - waits for Vault bootstrap, broker, and backoffice health checks before starting Caddy
 - mounts the Caddy config and exported local CA certificate
+
+### 5.2.1 Security drill
+
+Run the live auth-negative drill from the stack root:
+
+```bash
+./scripts/security-drill.sh
+```
+
+The drill attacks the broker with malformed tokens and, when `BROKER_JWT_X_ENABLED=true`, also with an injected attacker-controlled JWKS. If a probe succeeds unexpectedly, the script hardens `.env`, rebuilds the broker, and re-runs the drill. If the problem persists, it stops `broker` and `caddy` to contain exposure.
 
 ### 5.3 `Caddyfile`
 

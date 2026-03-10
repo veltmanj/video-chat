@@ -1,6 +1,7 @@
 package nl.nextend.videobroker.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.util.StringUtils;
 
 import java.net.URI;
 import java.time.Duration;
@@ -12,6 +13,7 @@ public class BrokerJwtProperties {
 
     private boolean enabled = false;
     private Duration cacheTtl = Duration.ofMinutes(15);
+    private Duration clockSkew = Duration.ofSeconds(30);
     private final Vault vault = new Vault();
     private List<Provider> providers = new ArrayList<>();
 
@@ -29,6 +31,14 @@ public class BrokerJwtProperties {
 
     public void setCacheTtl(Duration cacheTtl) {
         this.cacheTtl = cacheTtl;
+    }
+
+    public Duration getClockSkew() {
+        return clockSkew;
+    }
+
+    public void setClockSkew(Duration clockSkew) {
+        this.clockSkew = clockSkew;
     }
 
     public Vault getVault() {
@@ -88,6 +98,7 @@ public class BrokerJwtProperties {
         private boolean enabled = true;
         private String name = "";
         private List<String> issuers = new ArrayList<>();
+        private List<String> audiences = new ArrayList<>();
         private String vaultPath = "";
         private String vaultField = "jwks_json";
 
@@ -112,7 +123,15 @@ public class BrokerJwtProperties {
         }
 
         public void setIssuers(List<String> issuers) {
-            this.issuers = issuers == null ? new ArrayList<>() : new ArrayList<>(issuers);
+            this.issuers = normalizeValues(issuers);
+        }
+
+        public List<String> getAudiences() {
+            return audiences;
+        }
+
+        public void setAudiences(List<String> audiences) {
+            this.audiences = normalizeValues(audiences);
         }
 
         public String getVaultPath() {
@@ -129,6 +148,17 @@ public class BrokerJwtProperties {
 
         public void setVaultField(String vaultField) {
             this.vaultField = vaultField == null ? "jwks_json" : vaultField.trim();
+        }
+
+        private List<String> normalizeValues(List<String> values) {
+            if (values == null) {
+                return new ArrayList<>();
+            }
+
+            return values.stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .toList();
         }
     }
 }

@@ -14,6 +14,7 @@ broker:
   jwt:
     enabled: ${BROKER_JWT_ENABLED:false}
     cache-ttl: ${BROKER_JWT_CACHE_TTL:15m}
+    clock-skew: ${BROKER_JWT_CLOCK_SKEW:30s}
     vault:
       uri: ${BROKER_JWT_VAULT_URI:http://localhost:8200}
       token: ${BROKER_JWT_VAULT_TOKEN:}
