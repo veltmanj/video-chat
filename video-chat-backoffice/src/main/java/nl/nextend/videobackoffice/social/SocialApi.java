@@ -58,8 +58,18 @@ public final class SocialApi {
         String authorAvatarUrl,
         String body,
         Instant createdAt,
+        List<MediaResponse> media,
         Map<String, Integer> reactionCounts,
         Set<String> viewerReactions
+    ) {
+    }
+
+    public record MediaResponse(
+        String id,
+        MediaKind kind,
+        String mimeType,
+        String fileName,
+        long fileSize
     ) {
     }
 
@@ -70,7 +80,7 @@ public final class SocialApi {
     ) {
     }
 
-    public record CreatePostRequest(@NotBlank @Size(max = 2000) String body) {
+    public record CreatePostRequest(@Size(max = 2000) String body, List<String> mediaIds) {
     }
 
     public record ReactRequest(@NotBlank @Size(max = 32) String reactionType) {

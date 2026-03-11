@@ -30,3 +30,11 @@ backoffice:
       google-audience: ${BACKOFFICE_SOCIAL_GOOGLE_AUDIENCE:}
     feed-limit: ${BACKOFFICE_SOCIAL_FEED_LIMIT:50}
     search-limit: ${BACKOFFICE_SOCIAL_SEARCH_LIMIT:20}
+    media:
+      enabled: ${BACKOFFICE_SOCIAL_MEDIA_ENABLED:false}
+      max-upload-bytes: ${BACKOFFICE_SOCIAL_MEDIA_MAX_UPLOAD_BYTES:26214400}
+      max-files-per-post: ${BACKOFFICE_SOCIAL_MEDIA_MAX_FILES_PER_POST:4}
+      endpoint: ${BACKOFFICE_SOCIAL_MEDIA_ENDPOINT:}
+      access-key: ${BACKOFFICE_SOCIAL_MEDIA_ACCESS_KEY:}
+      secret-key: ${BACKOFFICE_SOCIAL_MEDIA_SECRET_KEY:}
+      bucket: ${BACKOFFICE_SOCIAL_MEDIA_BUCKET:social-media}

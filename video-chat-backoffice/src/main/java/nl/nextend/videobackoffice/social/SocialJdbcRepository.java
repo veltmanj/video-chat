@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -44,6 +45,17 @@ class SocialJdbcRepository {
         rs.getString("author_handle"),
         rs.getString("author_display_name"),
         rs.getString("author_avatar_url")
+    );
+
+    private static final RowMapper<MediaAssetRow> MEDIA_ROW_MAPPER = (rs, rowNum) -> new MediaAssetRow(
+        rs.getObject("media_id", UUID.class),
+        rs.getObject("owner_profile_id", UUID.class),
+        rs.getString("storage_key"),
+        rs.getString("original_filename"),
+        rs.getString("mime_type"),
+        MediaKind.valueOf(rs.getString("media_kind")),
+        rs.getLong("file_size"),
+        timestamp(rs, "media_created_at")
     );
 
     private final JdbcTemplate jdbcTemplate;
@@ -286,6 +298,95 @@ class SocialJdbcRepository {
         return findPostById(postId).orElseThrow();
     }
 
+    MediaAssetRow createMedia(UUID mediaId,
+                              UUID ownerProfileId,
+                              String storageKey,
+                              String originalFilename,
+                              String mimeType,
+                              MediaKind kind,
+                              long fileSize,
+                              Instant now) {
+        jdbcTemplate.update(
+            """
+            insert into media_assets (id, owner_profile_id, storage_key, original_filename, mime_type, media_kind, file_size, created_at)
+            values (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            mediaId,
+            ownerProfileId,
+            storageKey,
+            originalFilename,
+            mimeType,
+            kind.name(),
+            fileSize,
+            Timestamp.from(now)
+        );
+        return findMediaById(mediaId).orElseThrow();
+    }
+
+    List<MediaAssetRow> findMediaByIdsAndOwner(Collection<UUID> mediaIds, UUID ownerProfileId) {
+        if (mediaIds.isEmpty()) {
+            return List.of();
+        }
+
+        String placeholders = mediaIds.stream().map(ignored -> "?").collect(Collectors.joining(", "));
+        List<Object> params = new ArrayList<>();
+        params.add(ownerProfileId);
+        params.addAll(mediaIds);
+        return jdbcTemplate.query(
+            """
+            select
+                m.id as media_id,
+                m.owner_profile_id,
+                m.storage_key,
+                m.original_filename,
+                m.mime_type,
+                m.media_kind,
+                m.file_size,
+                m.created_at as media_created_at
+            from media_assets m
+            where m.owner_profile_id = ?
+              and m.id in (%s)
+            order by m.created_at asc
+            """.formatted(placeholders),
+            MEDIA_ROW_MAPPER,
+            params.toArray()
+        );
+    }
+
+    Optional<MediaAssetRow> findMediaById(UUID mediaId) {
+        return jdbcTemplate.query(
+            """
+            select
+                m.id as media_id,
+                m.owner_profile_id,
+                m.storage_key,
+                m.original_filename,
+                m.mime_type,
+                m.media_kind,
+                m.file_size,
+                m.created_at as media_created_at
+            from media_assets m
+            where m.id = ?
+            """,
+            MEDIA_ROW_MAPPER,
+            mediaId
+        ).stream().findFirst();
+    }
+
+    void attachMedia(UUID postId, List<UUID> mediaIds) {
+        for (int index = 0; index < mediaIds.size(); index++) {
+            jdbcTemplate.update(
+                """
+                insert into post_media_assets (post_id, media_asset_id, sort_order)
+                values (?, ?, ?)
+                """,
+                postId,
+                mediaIds.get(index),
+                index
+            );
+        }
+    }
+
     Optional<PostRow> findPostById(UUID postId) {
         return jdbcTemplate.query(
             """
@@ -363,6 +464,77 @@ class SocialJdbcRepository {
             viewerId,
             limit
         );
+    }
+
+    Map<UUID, List<MediaAssetRow>> loadMediaForPosts(Collection<UUID> postIds) {
+        if (postIds.isEmpty()) {
+            return Map.of();
+        }
+
+        String placeholders = postIds.stream().map(ignored -> "?").collect(Collectors.joining(", "));
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+            """
+            select
+                pma.post_id,
+                m.id as media_id,
+                m.owner_profile_id,
+                m.storage_key,
+                m.original_filename,
+                m.mime_type,
+                m.media_kind,
+                m.file_size,
+                m.created_at as media_created_at
+            from post_media_assets pma
+            join media_assets m on m.id = pma.media_asset_id
+            where pma.post_id in (%s)
+            order by pma.post_id, pma.sort_order asc
+            """.formatted(placeholders),
+            postIds.toArray()
+        );
+
+        Map<UUID, List<MediaAssetRow>> grouped = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            UUID postId = (UUID) row.get("post_id");
+            grouped.computeIfAbsent(postId, ignored -> new ArrayList<>()).add(new MediaAssetRow(
+                (UUID) row.get("media_id"),
+                (UUID) row.get("owner_profile_id"),
+                (String) row.get("storage_key"),
+                (String) row.get("original_filename"),
+                (String) row.get("mime_type"),
+                MediaKind.valueOf((String) row.get("media_kind")),
+                ((Number) row.get("file_size")).longValue(),
+                timestamp(row.get("media_created_at"))
+            ));
+        }
+        return grouped;
+    }
+
+    Optional<MediaAccessRow> findMediaAccessById(UUID mediaId) {
+        return jdbcTemplate.query(
+            """
+            select
+                m.id as media_id,
+                m.owner_profile_id,
+                m.storage_key,
+                m.original_filename,
+                m.mime_type,
+                m.media_kind,
+                m.file_size,
+                m.created_at as media_created_at,
+                pma.post_id,
+                p.author_profile_id
+            from media_assets m
+            left join post_media_assets pma on pma.media_asset_id = m.id
+            left join posts p on p.id = pma.post_id
+            where m.id = ?
+            """,
+            (rs, rowNum) -> new MediaAccessRow(
+                MEDIA_ROW_MAPPER.mapRow(rs, rowNum),
+                rs.getObject("post_id", UUID.class),
+                rs.getObject("author_profile_id", UUID.class)
+            ),
+            mediaId
+        ).stream().findFirst();
     }
 
     Map<UUID, Map<String, Integer>> loadReactionCounts(Collection<UUID> postIds) {
@@ -450,6 +622,19 @@ class SocialJdbcRepository {
         return timestamp == null ? null : timestamp.toInstant();
     }
 
+    private static Instant timestamp(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Timestamp timestamp) {
+            return timestamp.toInstant();
+        }
+        if (value instanceof OffsetDateTime offsetDateTime) {
+            return offsetDateTime.toInstant();
+        }
+        throw new IllegalArgumentException("Unsupported timestamp value: " + value.getClass().getName());
+    }
+
     private static String emptyToNull(String value) {
         return value == null || value.isBlank() ? null : value;
     }
@@ -489,5 +674,20 @@ class SocialJdbcRepository {
         String authorDisplayName,
         String authorAvatarUrl
     ) {
+    }
+
+    record MediaAssetRow(
+        UUID id,
+        UUID ownerProfileId,
+        String storageKey,
+        String originalFilename,
+        String mimeType,
+        MediaKind kind,
+        long fileSize,
+        Instant createdAt
+    ) {
+    }
+
+    record MediaAccessRow(MediaAssetRow media, UUID postId, UUID authorProfileId) {
     }
 }

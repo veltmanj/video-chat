@@ -1,20 +1,29 @@
 package nl.nextend.videobackoffice.integration;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
 import nl.nextend.videobackoffice.social.ProfileVisibility;
 import nl.nextend.videobackoffice.social.SocialApi.FeedResponse;
 import nl.nextend.videobackoffice.social.SocialApi.GrantAccessResult;
+import nl.nextend.videobackoffice.social.SocialApi.MediaResponse;
 import nl.nextend.videobackoffice.social.SocialApi.PostResponse;
 import nl.nextend.videobackoffice.social.SocialApi.ProfileResponse;
 import nl.nextend.videobackoffice.social.SocialApi.ProfileSummary;
 import nl.nextend.videobackoffice.social.SocialApi.ViewerResponse;
+import nl.nextend.videobackoffice.social.SocialMediaStorage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.JwtMutator;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
@@ -22,7 +31,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.mockJwt;
 import static org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.springSecurity;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = "backoffice.social.media.enabled=true"
+)
+@Import(SocialIntegrationTest.TestMediaStorageConfig.class)
 class SocialIntegrationTest {
 
     private static final TestUser ALICE = new TestUser("social-alice-sub", "alice@example.com", "Alice Example");
@@ -57,10 +70,17 @@ class SocialIntegrationTest {
         ProfileResponse aliceProfile = updateProfile(ALICE, "Alice Example", "Private updates only", ProfileVisibility.PRIVATE);
         assertThat(aliceProfile.visibility()).isEqualTo(ProfileVisibility.PRIVATE);
 
-        PostResponse alicePost = createPost(ALICE, "Private update");
+        byte[] uploadedBytes = "private-image".getBytes(StandardCharsets.UTF_8);
+        MediaResponse uploadedMedia = uploadMedia(ALICE, "private.png", "image/png", uploadedBytes);
+        PostResponse alicePost = createPost(ALICE, "Private update", List.of(uploadedMedia.id()));
+        assertThat(alicePost.media()).extracting(MediaResponse::id).containsExactly(uploadedMedia.id());
         assertThat(feed(BOB).posts()).isEmpty();
 
         profileRequest(BOB, aliceProfile.handle())
+            .exchange()
+            .expectStatus().isForbidden();
+
+        downloadMedia(BOB, uploadedMedia.id())
             .exchange()
             .expectStatus().isForbidden();
 
@@ -89,9 +109,20 @@ class SocialIntegrationTest {
         assertThat(bobViewOfAlice.canView()).isTrue();
         assertThat(bobViewOfAlice.accessGranted()).isTrue();
         assertThat(bobViewOfAlice.recentPosts()).extracting(PostResponse::id).containsExactly(alicePost.id());
+        assertThat(bobViewOfAlice.recentPosts().get(0).media()).extracting(MediaResponse::id).containsExactly(uploadedMedia.id());
 
         FeedResponse bobFeed = feed(BOB);
         assertThat(bobFeed.posts()).extracting(PostResponse::id).containsExactly(alicePost.id());
+        assertThat(bobFeed.posts().get(0).media()).extracting(MediaResponse::id).containsExactly(uploadedMedia.id());
+
+        byte[] downloadedBytes = downloadMedia(BOB, uploadedMedia.id())
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody(byte[].class)
+            .returnResult()
+            .getResponseBody();
+
+        assertThat(downloadedBytes).isEqualTo(uploadedBytes);
 
         PostResponse reacted = auth(BOB)
             .post()
@@ -211,14 +242,32 @@ class SocialIntegrationTest {
             .getResponseBody();
     }
 
-    private PostResponse createPost(TestUser user, String body) {
+    private PostResponse createPost(TestUser user, String body, List<String> mediaIds) {
         return auth(user)
             .post()
             .uri("/social/v1/posts")
-            .bodyValue(new CreatePostRequest(body))
+            .bodyValue(new CreatePostRequest(body, mediaIds))
             .exchange()
             .expectStatus().isOk()
             .expectBody(PostResponse.class)
+            .returnResult()
+            .getResponseBody();
+    }
+
+    private MediaResponse uploadMedia(TestUser user, String fileName, String contentType, byte[] body) {
+        MultipartBodyBuilder builder = new MultipartBodyBuilder();
+        builder.part("file", body)
+            .filename(fileName)
+            .contentType(MediaType.parseMediaType(contentType));
+
+        return auth(user)
+            .post()
+            .uri("/social/v1/media/uploads")
+            .contentType(MediaType.MULTIPART_FORM_DATA)
+            .bodyValue(builder.build())
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody(MediaResponse.class)
             .returnResult()
             .getResponseBody();
     }
@@ -240,6 +289,12 @@ class SocialIntegrationTest {
             .uri("/social/v1/profiles/{handle}", handle);
     }
 
+    private WebTestClient.RequestHeadersSpec<?> downloadMedia(TestUser user, String mediaId) {
+        return auth(user)
+            .get()
+            .uri("/social/v1/media/{mediaId}/content", mediaId);
+    }
+
     private WebTestClient auth(TestUser user) {
         JwtMutator jwt = mockJwt().jwt(builder -> builder
             .subject(user.subject())
@@ -250,6 +305,8 @@ class SocialIntegrationTest {
 
     private void clearSocialTables() {
         jdbcTemplate.execute("delete from post_reactions");
+        jdbcTemplate.execute("delete from post_media_assets");
+        jdbcTemplate.execute("delete from media_assets");
         jdbcTemplate.execute("delete from posts");
         jdbcTemplate.execute("delete from profile_access_grants");
         jdbcTemplate.execute("delete from profile_follows");
@@ -307,8 +364,29 @@ class SocialIntegrationTest {
                 primary key (post_id, reactor_profile_id, reaction_type)
             )
             """);
+        jdbcTemplate.execute("""
+            create table if not exists media_assets (
+                id uuid primary key,
+                owner_profile_id uuid not null references profiles(id) on delete cascade,
+                storage_key varchar(512) not null unique,
+                original_filename varchar(255) not null,
+                mime_type varchar(255) not null,
+                media_kind varchar(16) not null,
+                file_size bigint not null,
+                created_at timestamp not null
+            )
+            """);
+        jdbcTemplate.execute("""
+            create table if not exists post_media_assets (
+                post_id uuid not null references posts(id) on delete cascade,
+                media_asset_id uuid not null unique references media_assets(id) on delete cascade,
+                sort_order integer not null,
+                primary key (post_id, media_asset_id)
+            )
+            """);
         jdbcTemplate.execute("create index if not exists idx_profiles_handle on profiles (handle)");
         jdbcTemplate.execute("create index if not exists idx_posts_created on posts (created_at desc)");
+        jdbcTemplate.execute("create index if not exists idx_post_media_assets_post on post_media_assets (post_id, sort_order)");
     }
 
     private record TestUser(String subject, String email, String displayName) {
@@ -317,12 +395,38 @@ class SocialIntegrationTest {
     private record UpdateProfileRequest(String displayName, String bio, ProfileVisibility visibility) {
     }
 
-    private record CreatePostRequest(String body) {
+    private record CreatePostRequest(String body, List<String> mediaIds) {
     }
 
     private record ReactionRequest(String reactionType) {
     }
 
     private record ViewerHandlesRequest(List<String> viewerHandles) {
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class TestMediaStorageConfig {
+
+        @Bean
+        SocialMediaStorage socialMediaStorage() {
+            return new SocialMediaStorage() {
+                private final Map<String, byte[]> objects = new java.util.concurrent.ConcurrentHashMap<>();
+
+                @Override
+                public void putObject(String objectKey, java.nio.file.Path file, String contentType) {
+                    try {
+                        objects.put(objectKey, java.nio.file.Files.readAllBytes(file));
+                    } catch (java.io.IOException exception) {
+                        throw new IllegalStateException(exception);
+                    }
+                }
+
+                @Override
+                public byte[] getObject(String objectKey) {
+                    byte[] bytes = objects.get(objectKey);
+                    return bytes == null ? null : bytes.clone();
+                }
+            };
+        }
     }
 }

@@ -1,5 +1,8 @@
 package nl.nextend.videobackoffice.social;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 
@@ -7,6 +10,7 @@ import nl.nextend.videobackoffice.social.SocialApi.CreatePostRequest;
 import nl.nextend.videobackoffice.social.SocialApi.FeedResponse;
 import nl.nextend.videobackoffice.social.SocialApi.GrantAccessRequest;
 import nl.nextend.videobackoffice.social.SocialApi.GrantAccessResult;
+import nl.nextend.videobackoffice.social.SocialApi.MediaResponse;
 import nl.nextend.videobackoffice.social.SocialApi.PostResponse;
 import nl.nextend.videobackoffice.social.SocialApi.ProfileResponse;
 import nl.nextend.videobackoffice.social.SocialApi.ProfileSummary;
@@ -14,6 +18,11 @@ import nl.nextend.videobackoffice.social.SocialApi.ReactRequest;
 import nl.nextend.videobackoffice.social.SocialApi.UpdateProfileRequest;
 import nl.nextend.videobackoffice.social.SocialApi.ViewerResponse;
 import jakarta.validation.Valid;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -22,9 +31,12 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @RestController
 @RequestMapping("/social/v1")
@@ -86,6 +98,34 @@ public class SocialController {
         return socialService.createPost(jwt, request);
     }
 
+    @PostMapping(path = "/media/uploads", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    Mono<MediaResponse> uploadMedia(@AuthenticationPrincipal Jwt jwt, @RequestPart("file") FilePart filePart) {
+        String contentType = filePart.headers().getContentType() == null ? "" : filePart.headers().getContentType().toString();
+        return Mono.usingWhen(
+            Mono.fromCallable(() -> Files.createTempFile("social-upload-", ".bin"))
+                .subscribeOn(Schedulers.boundedElastic()),
+            tempFile -> filePart.transferTo(tempFile)
+                .then(Mono.fromCallable(() -> socialService.uploadMedia(jwt, filePart.filename(), contentType, tempFile))
+                    .subscribeOn(Schedulers.boundedElastic())),
+            SocialController::deleteTempFile
+        );
+    }
+
+    @GetMapping("/media/{mediaId}/content")
+    Mono<ResponseEntity<byte[]>> mediaContent(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID mediaId) {
+        return Mono.fromCallable(() -> socialService.downloadMedia(jwt, mediaId))
+            .subscribeOn(Schedulers.boundedElastic())
+            .map(media -> ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=300")
+                .header(
+                    HttpHeaders.CONTENT_DISPOSITION,
+                    ContentDisposition.inline().filename(media.fileName()).build().toString()
+                )
+                .contentType(MediaType.parseMediaType(media.mimeType()))
+                .contentLength(media.bytes().length)
+                .body(media.bytes()));
+    }
+
     @PostMapping("/posts/{postId}/reactions")
     PostResponse addReaction(@AuthenticationPrincipal Jwt jwt,
                              @PathVariable UUID postId,
@@ -98,5 +138,17 @@ public class SocialController {
                                 @PathVariable UUID postId,
                                 @PathVariable String reactionType) {
         return socialService.removeReaction(jwt, postId, reactionType);
+    }
+
+    private static Mono<Void> deleteTempFile(Path tempFile) {
+        return Mono.fromRunnable(() -> {
+                try {
+                    Files.deleteIfExists(tempFile);
+                } catch (IOException ignored) {
+                    // Best-effort cleanup for uploaded temp files.
+                }
+            })
+            .subscribeOn(Schedulers.boundedElastic())
+            .then();
     }
 }
