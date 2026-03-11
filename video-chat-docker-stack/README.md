@@ -80,6 +80,12 @@ Check service health and published ports:
 ./scripts/check.sh
 ```
 
+Run the authenticated social media smoke test:
+
+```bash
+SOCIAL_BEARER_TOKEN=<google-id-token> ./scripts/social-media-smoke.sh
+```
+
 Tail logs:
 
 ```bash
@@ -113,6 +119,12 @@ Security drill:
 - Run `./scripts/security-drill.sh` to execute live negative-auth probes against the broker.
 - If the drill detects an auth bypass, it auto-applies the obvious mitigations, rebuilds the broker, and re-tests.
 - If the stack still accepts the malicious probes after mitigation, the script stops `broker` and `caddy` to contain exposure.
+
+Social media smoke test:
+
+- Run `./scripts/social-media-smoke.sh` with `SOCIAL_BEARER_TOKEN` set to a real Google ID token from the running app session.
+- The script exercises `me`, media upload, post creation, feed hydration, media download, and database attachment checks through Caddy.
+- The script creates one smoke-test post and does not delete it.
 
 ## Google OAuth
 

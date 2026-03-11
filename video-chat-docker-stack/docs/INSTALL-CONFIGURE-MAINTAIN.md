@@ -257,6 +257,12 @@ Run the built-in health and route checks:
 ./scripts/check.sh
 ```
 
+Run the authenticated social media smoke test:
+
+```bash
+SOCIAL_BEARER_TOKEN=<google-id-token> ./scripts/social-media-smoke.sh
+```
+
 ## 8. Monitoring and debugging commands
 
 Show service status:
@@ -321,6 +327,12 @@ Check the public backoffice API through Caddy:
 
 ```bash
 curl -sk --http1.1 https://$VIDEOCHAT_HOST/backoffice-api/api/rooms
+```
+
+Run the authenticated social media smoke test through Caddy:
+
+```bash
+SOCIAL_BEARER_TOKEN=<google-id-token> ./scripts/social-media-smoke.sh
 ```
 
 Check the local certificate download endpoint:

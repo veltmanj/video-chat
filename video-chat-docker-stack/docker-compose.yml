@@ -40,6 +40,23 @@ services:
     volumes:
       - social-db-data:/var/lib/postgresql/data
 
+  minio:
+    <<: *service-defaults
+    image: ${MINIO_IMAGE:-minio/minio:latest}
+    container_name: ${MINIO_CONTAINER_NAME:-videochat-minio}
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-videochat-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-videochat-minio-secret}
+    ports:
+      - "${MINIO_API_HOST_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
+    healthcheck:
+      <<: *http-healthcheck
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null || exit 1"]
+    volumes:
+      - minio-data:/data
+
   social-db-seed:
     <<: *job-defaults
     profiles:
@@ -168,11 +185,20 @@ services:
     depends_on:
       social-db:
         condition: service_healthy
+      minio:
+        condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://social-db:5432/${SOCIAL_DB_NAME:-videochat}
       SPRING_DATASOURCE_USERNAME: ${SOCIAL_DB_USER:-videochat}
       SPRING_DATASOURCE_PASSWORD: ${SOCIAL_DB_PASSWORD:-videochat}
       BACKOFFICE_SOCIAL_GOOGLE_AUDIENCE: ${BACKOFFICE_SOCIAL_GOOGLE_AUDIENCE:-}
+      BACKOFFICE_SOCIAL_MEDIA_ENABLED: ${BACKOFFICE_SOCIAL_MEDIA_ENABLED:-true}
+      BACKOFFICE_SOCIAL_MEDIA_ENDPOINT: http://minio:9000
+      BACKOFFICE_SOCIAL_MEDIA_ACCESS_KEY: ${MINIO_ROOT_USER:-videochat-minio}
+      BACKOFFICE_SOCIAL_MEDIA_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-videochat-minio-secret}
+      BACKOFFICE_SOCIAL_MEDIA_BUCKET: ${BACKOFFICE_SOCIAL_MEDIA_BUCKET:-social-media}
+      BACKOFFICE_SOCIAL_MEDIA_MAX_UPLOAD_BYTES: ${BACKOFFICE_SOCIAL_MEDIA_MAX_UPLOAD_BYTES:-26214400}
+      BACKOFFICE_SOCIAL_MEDIA_MAX_FILES_PER_POST: ${BACKOFFICE_SOCIAL_MEDIA_MAX_FILES_PER_POST:-4}
     healthcheck:
       <<: *http-healthcheck
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:7901/actuator/health >/dev/null || exit 1"]
@@ -211,5 +237,7 @@ networks:
 volumes:
   caddy-data:
   caddy-config:
+  minio-data:
+    name: ${MINIO_VOLUME_NAME:-minio-data}
   social-db-data:
     name: ${SOCIAL_DB_VOLUME_NAME:-social-db-data}
