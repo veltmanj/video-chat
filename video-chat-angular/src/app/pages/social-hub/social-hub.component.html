@@ -46,7 +46,26 @@
     <div class="panel composer-panel">
       <p class="kicker">New post</p>
       <textarea [(ngModel)]="newPostBody" name="newPostBody" rows="4" maxlength="2000" placeholder="Share an update with your network."></textarea>
-      <button type="button" (click)="publishPost()">Publish</button>
+      <label class="upload-picker">
+        <span>Add images or videos</span>
+        <input type="file" accept="image/*,video/*" multiple (change)="onComposerFilesSelected($event)">
+      </label>
+
+      <div class="composer-upload-list" *ngIf="composerUploads.length">
+        <article class="composer-upload-card" *ngFor="let upload of composerUploads; trackBy: trackByComposerUpload">
+          <img *ngIf="upload.kind === 'IMAGE'" [src]="upload.previewUrl" [alt]="upload.file.name">
+          <video *ngIf="upload.kind === 'VIDEO'" [src]="upload.previewUrl" muted playsinline preload="metadata"></video>
+          <div class="composer-upload-meta">
+            <strong>{{ upload.file.name }}</strong>
+            <small>{{ upload.kind === 'VIDEO' ? 'Video' : 'Image' }} · {{ formatUploadSize(upload.file.size) }}</small>
+          </div>
+          <button type="button" class="ghost-button" (click)="removeComposerUpload(upload.id)">Remove</button>
+        </article>
+      </div>
+
+      <button type="button" (click)="publishPost()" [disabled]="!canPublishPost">
+        {{ publishingPost ? 'Publishing...' : 'Publish' }}
+      </button>
     </div>
 
     <p class="status-banner" *ngIf="statusMessage">{{ statusMessage }}</p>
@@ -60,7 +79,16 @@
         </div>
         <time>{{ post.createdAt | date:'medium' }}</time>
       </header>
-      <p class="post-body">{{ post.body }}</p>
+      <p class="post-body" *ngIf="post.body">{{ post.body }}</p>
+      <div class="post-media-grid" *ngIf="post.media.length">
+        <figure class="post-media-card" *ngFor="let media of post.media; trackBy: trackByMedia">
+          <img *ngIf="media.kind === 'IMAGE' && mediaUrl(media.id) as source" [src]="source" [alt]="media.fileName">
+          <video *ngIf="media.kind === 'VIDEO' && mediaUrl(media.id) as source" [src]="source" controls playsinline preload="metadata"></video>
+          <div class="media-placeholder" *ngIf="!mediaUrl(media.id)">
+            <span>Loading {{ media.kind === 'VIDEO' ? 'video' : 'image' }}...</span>
+          </div>
+        </figure>
+      </div>
       <div class="reaction-row">
         <button
           type="button"
@@ -133,7 +161,16 @@
       </div>
       <div class="mini-posts" *ngIf="profile.recentPosts.length">
         <article *ngFor="let post of profile.recentPosts; trackBy: trackByPost">
-          <p>{{ post.body }}</p>
+          <p *ngIf="post.body">{{ post.body }}</p>
+          <div class="mini-media-grid" *ngIf="post.media.length">
+            <figure class="mini-media-card" *ngFor="let media of post.media; trackBy: trackByMedia">
+              <img *ngIf="media.kind === 'IMAGE' && mediaUrl(media.id) as source" [src]="source" [alt]="media.fileName">
+              <video *ngIf="media.kind === 'VIDEO' && mediaUrl(media.id) as source" [src]="source" muted playsinline preload="metadata"></video>
+              <div class="media-placeholder compact" *ngIf="!mediaUrl(media.id)">
+                <span>Loading...</span>
+              </div>
+            </figure>
+          </div>
           <time>{{ post.createdAt | date:'short' }}</time>
         </article>
       </div>

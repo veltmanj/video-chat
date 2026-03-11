@@ -4,10 +4,17 @@
       <img src="assets/pulseroom-mark.svg" alt="PulseRoom">
       <span>PulseRoom</span>
     </a>
-    <nav class="topbar-nav" aria-label="Primary">
-      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Room</a>
-      <a routerLink="/social" routerLinkActive="active">Social</a>
-    </nav>
+    <a
+      class="profile-link"
+      routerLink="/social"
+      routerLinkActive="active"
+      aria-label="Open social profile"
+      [attr.title]="profileName">
+      <img *ngIf="profileImageUrl; else profileFallback" [src]="profileImageUrl" [alt]="profileName" (error)="onProfileImageError()">
+      <ng-template #profileFallback>
+        <span>{{ profileInitials }}</span>
+      </ng-template>
+    </a>
   </header>
   <router-outlet></router-outlet>
 </div>

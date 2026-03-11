@@ -11,8 +11,13 @@ import { LiveRoomComponent } from './live-room.component';
 
 describe('LiveRoomComponent', () => {
   interface AuthServiceStub {
+    authState$: BehaviorSubject<boolean>;
     accessToken: string | null;
     brokerToken: string | null;
+    identityClaims: Record<string, unknown> | null;
+    isAuthenticated: boolean;
+    isDevelopmentMode?: boolean;
+    profileName: string | null;
   }
 
   let fixture: ComponentFixture<LiveRoomComponent>;
@@ -92,8 +97,12 @@ describe('LiveRoomComponent', () => {
     } as unknown as MockedObject<WebrtcMeshService>;
 
     authService = {
+      authState$: new BehaviorSubject(false),
       accessToken: null,
-      brokerToken: null
+      brokerToken: null,
+      identityClaims: null,
+      isAuthenticated: false,
+      profileName: null
     };
 
     mediaDeviceService.listVideoInputs.mockResolvedValue([{ deviceId: 'cam-1', label: 'Camera 1' }]);
@@ -184,9 +193,22 @@ describe('LiveRoomComponent', () => {
     stateSubject.next('CONNECTED');
     fixture.detectChanges();
 
-    const text = fixture.nativeElement.textContent || '';
     expect(component.connected).toBe(true);
-    expect(text).toContain('CONNECTED');
+    expect(component.uiInfo).toContain('Verbonden');
+  });
+
+  it('automatically connects when auth state becomes authenticated', async () => {
+    authService.brokerToken = 'google-id-token';
+    authService.isAuthenticated = true;
+    authService.profileName = 'Operator Name';
+
+    authService.authState$.next(true);
+    await fixture.whenStable();
+
+    expect(rsocketRoomService.connect).toHaveBeenCalled();
+    const connectArgs = rsocketRoomService.connect.mock.calls.at(-1) as any[];
+    expect(connectArgs[3]).toBe('google-id-token');
+    expect(connectArgs[0].displayName).toBe('Operator Name');
   });
 
   it('shows validation error when adding camera while disconnected', async () => {

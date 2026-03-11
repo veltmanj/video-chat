@@ -1,4 +1,13 @@
 export type ProfileVisibility = 'PUBLIC' | 'PRIVATE';
+export type SocialMediaKind = 'IMAGE' | 'VIDEO';
+
+export interface SocialPostMedia {
+  id: string;
+  kind: SocialMediaKind;
+  mimeType: string;
+  fileName: string;
+  fileSize: number;
+}
 
 export interface SocialPost {
   id: string;
@@ -7,6 +16,7 @@ export interface SocialPost {
   authorAvatarUrl: string | null;
   body: string;
   createdAt: string;
+  media: SocialPostMedia[];
   reactionCounts: Record<string, number>;
   viewerReactions: string[];
 }

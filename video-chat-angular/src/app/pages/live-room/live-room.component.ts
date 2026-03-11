@@ -33,12 +33,12 @@ import { WebrtcMeshService } from '../../core/services/webrtc-mesh.service';
  */
 export class LiveRoomComponent implements OnInit, OnDestroy {
   private static readonly DEFAULT_ROOM_ID = 'main-stage';
-  private static readonly DEFAULT_DISPLAY_NAME_PREFIX = 'Host';
+  private static readonly DEFAULT_DISPLAY_NAME_PREFIX = 'PulseRoom';
   private static readonly ACCESS_TOKEN_STORAGE_KEY = 'pulse-room:broker-access-token';
   private static readonly RENEGOTIATION_RECOVERY_DELAY_MS = 1500;
 
   roomId = 'main-stage';
-  displayName = `${LiveRoomComponent.DEFAULT_DISPLAY_NAME_PREFIX}-${Math.floor(Math.random() * 1000)}`;
+  displayName = '';
   brokerEndpoints = environment.brokerWebsocketUrls.join(', ');
   accessToken = this.readStoredAccessToken();
 
@@ -74,6 +74,7 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     private webrtcMeshService: WebrtcMeshService
   ) {
     this.roomId = LiveRoomComponent.DEFAULT_ROOM_ID;
+    this.displayName = this.resolvePreferredDisplayName();
   }
 
   /**
@@ -87,11 +88,30 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     return this.shouldPreferSameOriginProxy();
   }
 
+  get stageSubtitle(): string {
+    return this.connected
+      ? `${this.displayName} is live on the shared stage.`
+      : 'Joining the shared stage and preparing your session.';
+  }
+
+  get addCameraLabel(): string {
+    if (this.isAddingCamera) {
+      return 'Adding...';
+    }
+
+    if (this.isConnecting && !this.connected) {
+      return 'Joining stage...';
+    }
+
+    return 'Add webcam';
+  }
+
   /**
    * Wires the component to the session/broker observables and starts local device discovery.
    */
   ngOnInit(): void {
     this.prefillBrokerToken();
+    this.displayName = this.resolvePreferredDisplayName();
 
     this.roomSessionService.feeds$
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -129,6 +149,19 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
             }
           })
         );
+      });
+
+    this.auth.authState$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((isAuthenticated: boolean) => {
+        this.runInZone(() => {
+          this.prefillBrokerToken();
+          this.displayName = this.resolvePreferredDisplayName();
+        });
+
+        if (isAuthenticated) {
+          void this.ensureRoomConnection();
+        }
       });
 
     this.registerDeviceChangeListener();
@@ -341,7 +374,19 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
    * Used by the template to keep the add-camera action disabled while preconditions are missing.
    */
   canAddCamera(): boolean {
-    return this.connected && !this.isAddingCamera && !!this.getSelectedDevice();
+    return this.connected && !this.isAddingCamera && !this.isConnecting && !!this.getSelectedDevice();
+  }
+
+  private async ensureRoomConnection(): Promise<void> {
+    if (!this.auth.isAuthenticated) {
+      return;
+    }
+
+    if (this.isConnecting || this.currentIdentity || this.connectionState === 'CONNECTED' || this.connectionState === 'RECONNECTING') {
+      return;
+    }
+
+    await this.connectRoom();
   }
 
   /**
@@ -567,8 +612,32 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
   private createIdentity(): ClientIdentity {
     return {
       clientId: this.roomSessionService.createId('client'),
-      displayName: this.displayName.trim() || 'Anonymous'
+      displayName: this.displayName.trim() || this.resolvePreferredDisplayName()
     };
+  }
+
+  private resolvePreferredDisplayName(): string {
+    const preferredName = this.auth.profileName?.trim();
+    if (preferredName) {
+      return preferredName;
+    }
+
+    const email = this.readIdentityClaim('email');
+    if (email) {
+      return email.split('@')[0];
+    }
+
+    return `${LiveRoomComponent.DEFAULT_DISPLAY_NAME_PREFIX}-${Math.floor(Math.random() * 1000)}`;
+  }
+
+  private readIdentityClaim(key: string): string | null {
+    const claims = this.auth.identityClaims;
+    if (!claims) {
+      return null;
+    }
+
+    const value = claims[key];
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
   }
 
   /**

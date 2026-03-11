@@ -76,6 +76,12 @@ p {
   gap: 0.8rem;
 }
 
+.upload-picker {
+  padding: 0.9rem 1rem;
+  border: 1px dashed rgba(125, 211, 252, 0.35);
+  border-radius: 1rem;
+}
+
 .search-hint {
   color: rgba(191, 219, 254, 0.82);
   font-size: 0.92rem;
@@ -122,7 +128,8 @@ button {
 .post-card header,
 .result-card,
 .result-actions,
-.reaction-row {
+.reaction-row,
+.composer-upload-card {
   display: flex;
   gap: 0.75rem;
 }
@@ -138,8 +145,91 @@ button {
   margin-top: 0.9rem;
 }
 
+.composer-upload-list,
+.post-media-grid,
+.mini-media-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.composer-upload-list,
+.post-media-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.mini-media-grid {
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+}
+
+.composer-upload-card,
+.post-media-card,
+.mini-media-card {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 1rem;
+  background: rgba(15, 23, 42, 0.75);
+}
+
+.composer-upload-card {
+  align-items: center;
+  padding: 0.65rem;
+}
+
+.composer-upload-card img,
+.composer-upload-card video,
+.post-media-card img,
+.post-media-card video,
+.mini-media-card img,
+.mini-media-card video {
+  width: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.composer-upload-card img,
+.composer-upload-card video {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 0.85rem;
+  flex: 0 0 auto;
+}
+
+.post-media-card img,
+.post-media-card video {
+  aspect-ratio: 4 / 3;
+}
+
+.mini-media-card img,
+.mini-media-card video {
+  aspect-ratio: 1;
+}
+
+.composer-upload-meta {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ghost-button {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+}
+
+.media-placeholder {
+  min-height: 11rem;
+  display: grid;
+  place-items: center;
+  color: rgba(191, 219, 254, 0.8);
+}
+
+.media-placeholder.compact {
+  min-height: 4.5rem;
+}
+
 .reaction-row button,
-.result-actions button {
+.result-actions button,
+.ghost-button {
   padding: 0.55rem 0.85rem;
   background: rgba(255, 255, 255, 0.08);
   color: #e2e8f0;

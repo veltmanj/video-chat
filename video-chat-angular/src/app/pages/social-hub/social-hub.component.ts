@@ -1,9 +1,22 @@
 import { CommonModule } from '@angular/common';
-import { Component } from '@angular/core';
+import { ChangeDetectorRef, Component, DestroyRef, NgZone, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
-import { SocialPost, SocialProfile, SocialProfileSummary, SocialViewerResponse } from '../../core/models/social.models';
+import {
+  SocialPost,
+  SocialPostMedia,
+  SocialProfile,
+  SocialProfileSummary,
+  SocialViewerResponse
+} from '../../core/models/social.models';
 import { SocialService } from '../../core/services/social.service';
+
+interface ComposerUpload {
+  id: string;
+  file: File;
+  kind: 'IMAGE' | 'VIDEO';
+  previewUrl: string;
+}
 
 @Component({
   selector: 'app-social-hub',
@@ -13,7 +26,16 @@ import { SocialService } from '../../core/services/social.service';
   styleUrl: './social-hub.component.scss'
 })
 export class SocialHubComponent {
+  private static readonly AUTO_REFRESH_INTERVAL_MS = 5000;
+  private static readonly MAX_FILES_PER_POST = 4;
+
   readonly reactionOptions = ['👍', '🔥', '👏', '❤️'];
+  private readonly ngZone = inject(NgZone);
+  private readonly changeDetectorRef = inject(ChangeDetectorRef);
+  private readonly destroyRef = inject(DestroyRef);
+  private autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly mediaObjectUrls = new Map<string, string>();
+  private readonly loadingMediaIds = new Set<string>();
 
   me: SocialProfile | null = null;
   accessGrants: SocialProfileSummary[] = [];
@@ -21,6 +43,7 @@ export class SocialHubComponent {
   searchResults: SocialProfileSummary[] = [];
   selectedProfile: SocialProfile | null = null;
   selectedGrantHandles: string[] = [];
+  composerUploads: ComposerUpload[] = [];
 
   displayName = '';
   bio = '';
@@ -31,35 +54,65 @@ export class SocialHubComponent {
   statusMessage = '';
   errorMessage = '';
   loading = true;
+  publishingPost = false;
 
   constructor(private socialService: SocialService) { }
 
   ngOnInit(): void {
     void this.refresh();
+    this.startAutoRefresh();
+    this.destroyRef.onDestroy(() => {
+      this.revokeRemoteMediaUrls();
+      this.clearComposerUploads();
+    });
   }
 
-  async refresh(): Promise<void> {
-    this.loading = true;
-    this.errorMessage = '';
+  async refresh(showLoading = true): Promise<void> {
+    if (showLoading) {
+      this.runInZone(() => {
+        this.loading = true;
+        this.errorMessage = '';
+      });
+    }
+
+    const selectedProfileHandle = this.selectedProfile?.handle ?? null;
 
     try {
-      const [viewer, feed] = await Promise.all([
+      const [viewer, feed, selectedProfile] = await Promise.all([
         firstValueFrom(this.socialService.viewer()),
-        firstValueFrom(this.socialService.feed())
+        firstValueFrom(this.socialService.feed()),
+        selectedProfileHandle
+          ? firstValueFrom(this.socialService.profile(selectedProfileHandle)).catch((error) => {
+            console.error('Failed to refresh selected profile', error);
+            return null;
+          })
+          : Promise.resolve<SocialProfile | null>(null)
       ]);
 
-      this.applyViewer(viewer);
-      this.feed = feed.posts;
+      this.runInZone(() => {
+        this.applyViewer(viewer);
+        this.feed = feed.posts;
+        if (selectedProfileHandle) {
+          this.selectedProfile = selectedProfile;
+        }
+      });
+      this.queueMediaLoadsFromCurrentState();
     } catch (error) {
       console.error('Failed to load social hub', error);
-      this.errorMessage = 'Could not load the social hub.';
+      this.runInZone(() => {
+        this.errorMessage = 'Could not load the social hub.';
+      });
     } finally {
-      this.loading = false;
+      if (showLoading) {
+        this.runInZone(() => {
+          this.loading = false;
+        });
+      }
     }
   }
 
   async saveProfile(): Promise<void> {
-    this.resetMessages();
+    this.runInZone(() => this.resetMessages());
 
     try {
       const updated = await firstValueFrom(this.socialService.updateProfile({
@@ -68,73 +121,116 @@ export class SocialHubComponent {
         visibility: this.visibility
       }));
 
-      this.me = updated;
-      this.statusMessage = 'Profile saved.';
+      this.runInZone(() => {
+        this.me = updated;
+        this.statusMessage = 'Profile saved.';
+      });
+      this.syncMediaForPosts(updated.recentPosts);
     } catch (error) {
       console.error('Failed to save profile', error);
-      this.errorMessage = 'Could not save your profile.';
+      this.runInZone(() => {
+        this.errorMessage = 'Could not save your profile.';
+      });
     }
   }
 
   async publishPost(): Promise<void> {
-    if (!this.newPostBody.trim()) {
+    if (!this.newPostBody.trim() && !this.composerUploads.length) {
       return;
     }
 
-    this.resetMessages();
+    this.runInZone(() => {
+      this.resetMessages();
+      this.publishingPost = true;
+    });
 
     try {
-      const created = await firstValueFrom(this.socialService.createPost(this.newPostBody.trim()));
-      this.feed = [created, ...this.feed];
-      if (this.me) {
-        this.me = { ...this.me, recentPosts: [created, ...this.me.recentPosts].slice(0, 20) };
-      }
-      this.newPostBody = '';
-      this.statusMessage = 'Post published.';
+      const uploadedMedia = await Promise.all(
+        this.composerUploads.map((upload) => firstValueFrom(this.socialService.uploadMedia(upload.file)))
+      );
+      const created = await firstValueFrom(
+        this.socialService.createPost(
+          this.newPostBody.trim(),
+          uploadedMedia.map((media) => media.id)
+        )
+      );
+
+      this.runInZone(() => {
+        this.feed = [created, ...this.feed];
+        if (this.me) {
+          this.me = { ...this.me, recentPosts: [created, ...this.me.recentPosts].slice(0, 20) };
+        }
+        this.newPostBody = '';
+        this.clearComposerUploads();
+        this.statusMessage = 'Post published.';
+      });
+      this.syncMediaForPosts([created]);
     } catch (error) {
       console.error('Failed to publish post', error);
-      this.errorMessage = 'Could not publish the post.';
+      this.runInZone(() => {
+        this.errorMessage = 'Could not publish the post.';
+      });
+    } finally {
+      this.runInZone(() => {
+        this.publishingPost = false;
+      });
     }
   }
 
   async performSearch(): Promise<void> {
-    this.resetMessages();
+    this.runInZone(() => this.resetMessages());
 
     try {
-      this.searchResults = await firstValueFrom(this.socialService.searchProfiles(this.searchQuery.trim(), this.searchScope));
+      const results = await firstValueFrom(this.socialService.searchProfiles(this.searchQuery.trim(), this.searchScope));
+      this.runInZone(() => {
+        this.searchResults = results;
+      });
     } catch (error) {
       console.error('Failed to search profiles', error);
-      this.errorMessage = 'Search failed.';
+      this.runInZone(() => {
+        this.errorMessage = 'Search failed.';
+      });
     }
   }
 
   async openProfile(handle: string): Promise<void> {
-    this.resetMessages();
+    this.runInZone(() => this.resetMessages());
 
     try {
-      this.selectedProfile = await firstValueFrom(this.socialService.profile(handle));
+      const profile = await firstValueFrom(this.socialService.profile(handle));
+      this.runInZone(() => {
+        this.selectedProfile = profile;
+      });
+      this.syncMediaForPosts(profile.recentPosts);
     } catch (error) {
       console.error('Failed to load profile', error);
-      this.selectedProfile = null;
-      this.errorMessage = 'That profile is private or unavailable.';
+      this.runInZone(() => {
+        this.selectedProfile = null;
+        this.errorMessage = 'That profile is private or unavailable.';
+      });
     }
   }
 
   async toggleFollow(profile: SocialProfileSummary): Promise<void> {
-    this.resetMessages();
+    this.runInZone(() => this.resetMessages());
 
     try {
       const updated = profile.following
         ? await firstValueFrom(this.socialService.unfollow(profile.handle))
         : await firstValueFrom(this.socialService.follow(profile.handle));
-      this.mergeSearchProfile(updated);
+      this.runInZone(() => {
+        this.mergeSearchProfile(updated);
+        this.statusMessage = updated.following ? `Following @${updated.handle}.` : `Unfollowed @${updated.handle}.`;
+      });
+      await this.refreshViewerOnly();
       if (this.selectedProfile?.handle === updated.handle) {
         await this.openProfile(updated.handle);
       }
-      this.statusMessage = updated.following ? `Following @${updated.handle}.` : `Unfollowed @${updated.handle}.`;
     } catch (error) {
       console.error('Failed to update follow state', error);
-      this.errorMessage = 'Could not update the connection.';
+      this.runInZone(() => {
+        this.errorMessage = 'Could not update the connection.';
+      });
     }
   }
 
@@ -143,38 +239,119 @@ export class SocialHubComponent {
       return;
     }
 
-    this.resetMessages();
+    this.runInZone(() => this.resetMessages());
 
     try {
       const result = await firstValueFrom(this.socialService.grantAccess(this.me.handle, this.selectedGrantHandles));
       if (result.grantedHandles.length) {
-        this.statusMessage = `Granted access to @${result.grantedHandles.join(', @')}.`;
-        this.markGrantedAccess(result.grantedHandles);
-        this.selectedGrantHandles = this.selectedGrantHandles
-          .filter((handle) => !result.grantedHandles.includes(handle));
+        this.runInZone(() => {
+          this.statusMessage = `Granted access to @${result.grantedHandles.join(', @')}.`;
+          this.markGrantedAccess(result.grantedHandles);
+          this.selectedGrantHandles = this.selectedGrantHandles
+            .filter((handle) => !result.grantedHandles.includes(handle));
+        });
         await this.refreshViewerOnly();
       }
       if (result.missingHandles.length) {
-        this.errorMessage = `Missing profiles: ${result.missingHandles.join(', ')}`;
+        this.runInZone(() => {
+          this.errorMessage = `Missing profiles: ${result.missingHandles.join(', ')}`;
+        });
       }
     } catch (error) {
       console.error('Failed to grant access', error);
-      this.errorMessage = 'Could not grant access.';
+      this.runInZone(() => {
+        this.errorMessage = 'Could not grant access.';
+      });
     }
   }
 
   async toggleReaction(post: SocialPost, reactionType: string): Promise<void> {
-    this.resetMessages();
+    this.runInZone(() => this.resetMessages());
 
     try {
       const updated = post.viewerReactions.includes(reactionType)
         ? await firstValueFrom(this.socialService.removeReaction(post.id, reactionType))
         : await firstValueFrom(this.socialService.addReaction(post.id, reactionType));
-      this.replacePost(updated);
+      this.runInZone(() => {
+        this.replacePost(updated);
+      });
+      this.syncMediaForPosts([updated]);
     } catch (error) {
       console.error('Failed to update reaction', error);
-      this.errorMessage = 'Could not update the reaction.';
+      this.runInZone(() => {
+        this.errorMessage = 'Could not update the reaction.';
+      });
     }
+  }
+
+  onComposerFilesSelected(event: Event): void {
+    const input = event.target as HTMLInputElement | null;
+    const files = Array.from(input?.files ?? []);
+    if (!files.length) {
+      return;
+    }
+
+    this.resetMessages();
+
+    const availableSlots = SocialHubComponent.MAX_FILES_PER_POST - this.composerUploads.length;
+    if (availableSlots <= 0) {
+      this.errorMessage = `You can attach up to ${SocialHubComponent.MAX_FILES_PER_POST} files per post.`;
+      if (input) {
+        input.value = '';
+      }
+      return;
+    }
+
+    const acceptedFiles = files.slice(0, availableSlots);
+    const rejectedFiles = files.slice(availableSlots);
+    const validUploads: ComposerUpload[] = [];
+
+    for (const file of acceptedFiles) {
+      const kind = this.resolveComposerMediaKind(file);
+      if (!kind) {
+        this.errorMessage = 'Only image and video files are supported.';
+        continue;
+      }
+      validUploads.push({
+        id: this.generateId(),
+        file,
+        kind,
+        previewUrl: URL.createObjectURL(file)
+      });
+    }
+
+    if (rejectedFiles.length) {
+      this.errorMessage = `You can attach up to ${SocialHubComponent.MAX_FILES_PER_POST} files per post.`;
+    }
+
+    this.composerUploads = [...this.composerUploads, ...validUploads];
+    if (input) {
+      input.value = '';
+    }
+  }
+
+  removeComposerUpload(uploadId: string): void {
+    const upload = this.composerUploads.find((candidate) => candidate.id === uploadId);
+    if (!upload) {
+      return;
+    }
+
+    URL.revokeObjectURL(upload.previewUrl);
+    this.composerUploads = this.composerUploads.filter((candidate) => candidate.id !== uploadId);
+  }
+
+  mediaUrl(mediaId: string): string | null {
+    return this.mediaObjectUrls.get(mediaId) ?? null;
+  }
+
+  formatUploadSize(bytes: number): string {
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    }
+    if (bytes < 1024 * 1024) {
+      return `${Math.round(bytes / 1024)} KB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   get canGrantAccess(): boolean {
@@ -183,6 +360,10 @@ export class SocialHubComponent {
 
   get canSubmitSelectedAccess(): boolean {
     return this.canGrantAccess && this.selectedGrantHandles.length > 0;
+  }
+
+  get canPublishPost(): boolean {
+    return (!!this.newPostBody.trim() || this.composerUploads.length > 0) && !this.publishingPost;
   }
 
   isGrantSelected(handle: string): boolean {
@@ -211,9 +392,39 @@ export class SocialHubComponent {
     return post.id;
   }
 
+  trackByMedia(_: number, media: SocialPostMedia): string {
+    return media.id;
+  }
+
+  trackByComposerUpload(_: number, upload: ComposerUpload): string {
+    return upload.id;
+  }
+
   private async refreshViewerOnly(): Promise<void> {
     const viewer = await firstValueFrom(this.socialService.viewer());
-    this.applyViewer(viewer);
+    this.runInZone(() => {
+      this.applyViewer(viewer);
+    });
+    this.syncMediaForPosts(viewer.me.recentPosts);
+  }
+
+  private startAutoRefresh(): void {
+    this.autoRefreshTimer = this.ngZone.runOutsideAngular(() => setInterval(() => {
+      if (document.visibilityState === 'hidden') {
+        return;
+      }
+
+      void this.refresh(false);
+    }, SocialHubComponent.AUTO_REFRESH_INTERVAL_MS));
+
+    this.destroyRef.onDestroy(() => {
+      if (!this.autoRefreshTimer) {
+        return;
+      }
+
+      clearInterval(this.autoRefreshTimer);
+      this.autoRefreshTimer = null;
+    });
   }
 
   private applyViewer(viewer: SocialViewerResponse): void {
@@ -254,8 +465,82 @@ export class SocialHubComponent {
     }
   }
 
+  private queueMediaLoadsFromCurrentState(): void {
+    this.syncMediaForPosts(this.feed);
+    this.syncMediaForPosts(this.me?.recentPosts ?? []);
+    this.syncMediaForPosts(this.selectedProfile?.recentPosts ?? []);
+  }
+
+  private syncMediaForPosts(posts: SocialPost[]): void {
+    for (const post of posts) {
+      for (const media of post.media) {
+        this.ensureMediaObjectUrl(media);
+      }
+    }
+  }
+
+  private ensureMediaObjectUrl(media: SocialPostMedia): void {
+    if (this.mediaObjectUrls.has(media.id) || this.loadingMediaIds.has(media.id)) {
+      return;
+    }
+
+    this.loadingMediaIds.add(media.id);
+    void firstValueFrom(this.socialService.mediaBlob(media.id))
+      .then((blob) => {
+        const objectUrl = URL.createObjectURL(blob);
+        this.runInZone(() => {
+          this.mediaObjectUrls.set(media.id, objectUrl);
+        });
+      })
+      .catch((error) => {
+        console.error('Failed to load media blob', error);
+      })
+      .finally(() => {
+        this.runInZone(() => {
+          this.loadingMediaIds.delete(media.id);
+        });
+      });
+  }
+
+  private clearComposerUploads(): void {
+    for (const upload of this.composerUploads) {
+      URL.revokeObjectURL(upload.previewUrl);
+    }
+    this.composerUploads = [];
+  }
+
+  private revokeRemoteMediaUrls(): void {
+    for (const objectUrl of this.mediaObjectUrls.values()) {
+      URL.revokeObjectURL(objectUrl);
+    }
+    this.mediaObjectUrls.clear();
+    this.loadingMediaIds.clear();
+  }
+
+  private resolveComposerMediaKind(file: File): 'IMAGE' | 'VIDEO' | null {
+    if (file.type.startsWith('image/')) {
+      return 'IMAGE';
+    }
+    if (file.type.startsWith('video/')) {
+      return 'VIDEO';
+    }
+    return null;
+  }
+
+  private generateId(): string {
+    return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
   private resetMessages(): void {
     this.statusMessage = '';
     this.errorMessage = '';
+  }
+
+  private runInZone<T>(callback: () => T): T {
+    const result = NgZone.isInAngularZone() ? callback() : this.ngZone.run(callback);
+    this.changeDetectorRef.detectChanges();
+    return result;
   }
 }

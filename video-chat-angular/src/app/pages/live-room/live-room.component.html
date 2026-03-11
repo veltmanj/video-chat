@@ -1,74 +1,34 @@
 <main class="live-shell">
-  <section class="control-bar">
-    <div class="room-card">
+  <section class="stage-header">
+    <div class="stage-copy">
       <div class="room-brand">
         <img class="room-logo" src="assets/pulseroom-mark.svg" alt="PulseRoom">
         <div>
-          <p class="room-kicker">PulseRoom</p>
-          <h1>PulseRoom Live</h1>
+          <p class="room-kicker">PulseRoom Main Stage</p>
+          <h1>Live control room</h1>
         </div>
       </div>
-      <p>Angular 21 + RSocket broker mesh + multi-webcam control room</p>
-      <div class="state" [class.state-connected]="connected">{{ connectionState }}</div>
+      <p>{{ stageSubtitle }}</p>
     </div>
 
-    <form class="join-form" (ngSubmit)="connectRoom()">
-      <label>
-        Display name
-        <input type="text" name="displayName" [(ngModel)]="displayName" maxlength="40">
-      </label>
-
-      <label>
-        Room ID
-        <input type="text" name="roomId" [(ngModel)]="roomId" maxlength="40">
-      </label>
-
-      <label>
-        Broker token (JWT)
-        <input
-          type="password"
-          name="accessToken"
-          [(ngModel)]="accessToken"
-          autocomplete="current-password"
-          maxlength="4096"
-          placeholder="Google ID token or provider JWT">
-      </label>
-
-      <label>
-        Broker URL(s)
-        <textarea
-          name="brokerEndpoints"
-          [(ngModel)]="brokerEndpoints"
-          rows="2"
-          autocomplete="off"
-          placeholder="wss://<host>/rsocket"
-          [disabled]="customBrokerUrlsLocked">
-        </textarea>
-      </label>
-
-      <div class="actions">
-        <button type="submit" [disabled]="connected || isConnecting">{{ isConnecting ? 'Connecting...' : 'Connect' }}</button>
-        <button type="button" class="ghost" (click)="disconnectRoom()" [disabled]="!connected">Disconnect</button>
-      </div>
-    </form>
-
-    <section class="camera-controls">
-      <h2>Camera registratie</h2>
-      <p>Selecteer een webcam en publiceer hem in de room.</p>
-      <div class="camera-actions">
-        <select [(ngModel)]="selectedDeviceSelection" name="selectedDeviceSelection">
+    <section class="camera-controls" aria-label="Camera controls">
+      <div class="camera-toolbar">
+        <label class="camera-picker">
+          Camera
+          <select [(ngModel)]="selectedDeviceSelection" name="selectedDeviceSelection">
           <option value="">Selecteer camera</option>
           <option *ngFor="let device of devices; let i = index" [value]="i">{{ device.label }}</option>
-        </select>
+          </select>
+        </label>
         <button type="button" class="ghost" (click)="refreshDevices()">Refresh</button>
-        <button type="button" (click)="addCamera()" [disabled]="!canAddCamera()">{{ isAddingCamera ? 'Adding...' : 'Add webcam' }}</button>
+        <button type="button" (click)="addCamera()" [disabled]="!canAddCamera()">{{ addCameraLabel }}</button>
       </div>
+      <p class="camera-note">The room auto-connects after sign-in. Add a camera whenever you are ready.</p>
     </section>
   </section>
 
-  <section *ngIf="uiError || uiInfo" class="status-banner">
-    <p class="status-error" *ngIf="uiError">{{ uiError }}</p>
-    <p class="status-info" *ngIf="uiInfo">{{ uiInfo }}</p>
+  <section *ngIf="uiError" class="status-banner">
+    <p class="status-error">{{ uiError }}</p>
   </section>
 
   <section class="stage-layout">

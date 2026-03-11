@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import {
   GrantAccessResult,
   SocialFeedResponse,
+  SocialPostMedia,
   SocialPost,
   SocialProfile,
   SocialProfileSummary,
@@ -49,8 +50,18 @@ export class SocialService {
     return this.http.post<GrantAccessResult>(`${this.baseUrl}/profiles/${ownerHandle}/access-grants`, { viewerHandles });
   }
 
-  createPost(body: string): Observable<SocialPost> {
-    return this.http.post<SocialPost>(`${this.baseUrl}/posts`, { body });
+  createPost(body: string, mediaIds: string[] = []): Observable<SocialPost> {
+    return this.http.post<SocialPost>(`${this.baseUrl}/posts`, { body, mediaIds });
+  }
+
+  uploadMedia(file: File): Observable<SocialPostMedia> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    return this.http.post<SocialPostMedia>(`${this.baseUrl}/media/uploads`, formData);
+  }
+
+  mediaBlob(mediaId: string): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/media/${mediaId}/content`, { responseType: 'blob' });
   }
 
   addReaction(postId: string, reactionType: string): Observable<SocialPost> {

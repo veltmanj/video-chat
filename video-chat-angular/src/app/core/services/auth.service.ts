@@ -165,6 +165,14 @@ export class AuthService {
     return this.identityClaimsValue;
   }
 
+  get profileName(): string | null {
+    return this.readStringClaim('name', 'given_name', 'email');
+  }
+
+  get profileImageUrl(): string | null {
+    return this.readStringClaim('picture');
+  }
+
   get isAuthenticated(): boolean {
     return !!this.brokerToken;
   }
@@ -375,5 +383,20 @@ export class AuthService {
   private pushDebugEvent(event: string): void {
     this.debugEvents.unshift(event);
     this.debugEvents.splice(8);
+  }
+
+  private readStringClaim(...keys: string[]): string | null {
+    if (!this.identityClaimsValue) {
+      return null;
+    }
+
+    for (const key of keys) {
+      const value = this.identityClaimsValue[key];
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+
+    return null;
   }
 }

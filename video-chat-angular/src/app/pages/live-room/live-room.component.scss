@@ -13,31 +13,32 @@
   padding: 1.1rem;
 }
 
-.control-bar {
+.stage-header {
   display: grid;
-  grid-template-columns: 1.2fr 1.6fr 1.4fr;
+  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr);
   gap: 1rem;
   margin-bottom: 1rem;
 }
 
-.room-card,
-.join-form,
+.stage-copy,
 .camera-controls {
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 18px;
-  padding: 1rem;
+  padding: 1.1rem 1.15rem;
   background: rgba(2, 6, 23, 0.58);
   backdrop-filter: blur(9px);
 }
 
-.room-card h1 {
+.stage-copy h1 {
   margin: 0;
-  font-size: 1.4rem;
+  font-size: clamp(1.45rem, 3vw, 2.15rem);
 }
 
-.room-card p {
-  margin: 0.45rem 0 0;
-  opacity: 0.75;
+.stage-copy p {
+  margin: 0.6rem 0 0;
+  max-width: 52ch;
+  color: rgba(226, 232, 240, 0.82);
+  line-height: 1.55;
 }
 
 .room-brand {
@@ -48,7 +49,7 @@
 
 .room-logo {
   display: block;
-  width: 68px;
+  width: 72px;
   height: auto;
 }
 
@@ -61,30 +62,23 @@
   text-transform: uppercase;
 }
 
-.state {
-  margin-top: 0.9rem;
-  display: inline-flex;
-  border-radius: 999px;
-  padding: 0.3rem 0.7rem;
-  font-weight: 700;
-  font-size: 0.74rem;
-  background: rgba(239, 68, 68, 0.25);
-  color: #fecaca;
-}
-
-.state-connected {
-  background: rgba(34, 197, 94, 0.25);
-  color: #bbf7d0;
-}
-
-.join-form,
 .camera-controls {
   display: flex;
   flex-direction: column;
-  gap: 0.72rem;
+  justify-content: space-between;
+  gap: 0.85rem;
 }
 
-label {
+.camera-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.camera-picker {
+  min-width: min(100%, 260px);
+  flex: 1 1 220px;
   display: flex;
   flex-direction: column;
   gap: 0.32rem;
@@ -100,13 +94,6 @@ select {
   background: rgba(0, 0, 0, 0.25);
   color: #f8fafc;
   padding: 0.55rem;
-}
-
-.actions,
-.camera-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
 }
 
 button {
@@ -127,6 +114,13 @@ button.ghost {
 button[disabled] {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.camera-note {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: rgba(191, 219, 254, 0.8);
 }
 
 .stage-layout {
@@ -164,11 +158,27 @@ button[disabled] {
 }
 
 @media (max-width: 1160px) {
-  .control-bar {
-    grid-template-columns: 1fr;
-  }
-
   .stage-layout {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
+  .stage-header {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .live-shell {
+    padding: 0.85rem;
+  }
+
+  .camera-toolbar {
+    align-items: stretch;
+  }
+
+  button {
+    width: 100%;
   }
 }
