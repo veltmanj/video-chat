@@ -389,6 +389,21 @@ export class WebrtcMeshService {
    */
   private addStreamToPeer(pc: RTCPeerConnection, stream: MediaStream): void {
     stream.getTracks().forEach((track) => {
+      const reusableTransceiver = pc.getTransceivers().find((transceiver) =>
+        transceiver.sender
+        && !transceiver.sender.track
+        && transceiver.receiver.track?.kind === track.kind
+      );
+
+      if (reusableTransceiver) {
+        reusableTransceiver.direction = 'sendrecv';
+        void reusableTransceiver.sender.replaceTrack(track).catch((error) => {
+          console.error('Reusing RTCRtpSender failed, falling back to addTrack', error);
+          pc.addTrack(track, stream);
+        });
+        return;
+      }
+
       pc.addTrack(track, stream);
     });
   }
@@ -400,6 +415,11 @@ export class WebrtcMeshService {
     const streamTracks = new Set(stream.getTracks());
     pc.getSenders().forEach((sender) => {
       if (sender.track && streamTracks.has(sender.track)) {
+        const transceiver = pc.getTransceivers().find((item) => item.sender === sender);
+        if (transceiver) {
+          transceiver.direction = 'recvonly';
+        }
+
         pc.removeTrack(sender);
       }
     });

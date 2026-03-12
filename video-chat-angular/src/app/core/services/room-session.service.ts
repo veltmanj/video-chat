@@ -305,15 +305,18 @@ export class RoomSessionService {
   }
 
   private findRemotePublishedFeedIndex(feeds: CameraFeed[], feed: CameraFeed): number {
-    const placeholderIndex = feeds.findIndex((item) =>
-      !item.local
-      && item.ownerId === feed.ownerId
-      && !!item.publishedFeedId
-      && !item.stream
-    );
+    const onlinePlaceholderFeeds = feeds
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) =>
+        !item.local
+        && item.ownerId === feed.ownerId
+        && !!item.publishedFeedId
+        && item.online
+        && !item.stream
+      );
 
-    if (placeholderIndex !== -1) {
-      return placeholderIndex;
+    if (onlinePlaceholderFeeds.length === 1) {
+      return onlinePlaceholderFeeds[0].index;
     }
 
     const publishedFeedsForOwner = feeds
@@ -322,6 +325,7 @@ export class RoomSessionService {
         !item.local
         && item.ownerId === feed.ownerId
         && !!item.publishedFeedId
+        && item.online
       );
 
     return publishedFeedsForOwner.length === 1

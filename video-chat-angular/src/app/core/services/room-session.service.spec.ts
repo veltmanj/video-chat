@@ -238,4 +238,71 @@ describe('RoomSessionService', () => {
       online: true
     }));
   });
+
+  it('does not bind a new remote track onto an older offline published tile', () => {
+    service.consumeRoomEvent({
+      type: 'CAMERA_PUBLISHED',
+      roomId: 'room-1',
+      senderId: 'remote-1',
+      senderName: 'Remote',
+      sentAt: new Date().toISOString(),
+      payload: {
+        feedId: 'feed-remote-old',
+        label: 'FaceTime HD Camera'
+      }
+    }, 'local-1');
+
+    service.consumeRoomEvent({
+      type: 'CAMERA_REMOVED',
+      roomId: 'room-1',
+      senderId: 'remote-1',
+      senderName: 'Remote',
+      sentAt: new Date().toISOString(),
+      payload: {
+        feedId: 'feed-remote-old'
+      }
+    }, 'local-1');
+
+    service.consumeRoomEvent({
+      type: 'CAMERA_PUBLISHED',
+      roomId: 'room-1',
+      senderId: 'remote-1',
+      senderName: 'Remote',
+      sentAt: new Date().toISOString(),
+      payload: {
+        feedId: 'feed-remote-new',
+        label: 'FaceTime HD Camera'
+      }
+    }, 'local-1');
+
+    service.upsertRemoteFeed({
+      id: service.createRemoteTrackFeedId('remote-1', 'track-2'),
+      ownerId: 'remote-1',
+      ownerName: 'Remote',
+      trackId: 'track-2',
+      label: 'Remote fallback label',
+      stream: {} as MediaStream,
+      local: false,
+      muted: true,
+      online: true
+    });
+
+    let feedsSnapshot: CameraFeed[] = [];
+    service.feeds$.subscribe((feeds) => (feedsSnapshot = feeds)).unsubscribe();
+
+    expect(feedsSnapshot).toHaveLength(2);
+    expect(feedsSnapshot).toContainEqual(expect.objectContaining({
+      id: service.createRemotePublishedFeedId('remote-1', 'feed-remote-old'),
+      publishedFeedId: 'feed-remote-old',
+      stream: undefined,
+      online: false
+    }));
+    expect(feedsSnapshot).toContainEqual(expect.objectContaining({
+      id: service.createRemotePublishedFeedId('remote-1', 'feed-remote-new'),
+      publishedFeedId: 'feed-remote-new',
+      trackId: 'track-2',
+      stream: expect.any(Object),
+      online: true
+    }));
+  });
 });
