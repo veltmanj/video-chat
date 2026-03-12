@@ -12,6 +12,7 @@ import {
   toBuffer
 } from 'rsocket-core';
 import { ClientIdentity, ConnectionState, RoomEvent, RoomEventPayloadMap, RoomEventType } from '../models/room.models';
+import { FrontendTelemetryService } from './frontend-telemetry.service';
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 
@@ -141,6 +142,8 @@ export class RsocketRoomService {
   readonly state$: Observable<ConnectionState> = this.stateSubject.asObservable();
   readonly roomEvents$: Observable<RoomEvent> = this.eventsSubject.asObservable();
 
+  constructor(private readonly telemetry?: FrontendTelemetryService) { }
+
   /**
    * Opens a broker connection and subscribes the client to room events.
    */
@@ -215,6 +218,7 @@ export class RsocketRoomService {
     }
 
     socket.fireAndForget(this.createEventRequest(event));
+    this.telemetry?.recordRoomEvent('sent', type, event.roomId);
   }
 
   /**
@@ -230,6 +234,7 @@ export class RsocketRoomService {
     return new Promise((resolve) => {
       socket.requestResponse!(this.createEventRequest(event)).subscribe({
         onComplete: () => {
+          this.telemetry?.recordRoomEvent('sent', type, event.roomId);
           resolve(true);
         },
         onError: (error: unknown) => {
@@ -340,6 +345,7 @@ export class RsocketRoomService {
         }
 
         this.eventsSubject.next(event);
+        this.telemetry?.recordRoomEvent('received', event.type, event.roomId);
       },
       onError: (error: unknown) => {
         this.handleStreamInterruption(socket, streamToken, error);
@@ -795,6 +801,7 @@ export class RsocketRoomService {
 
   private transitionTo(state: ConnectionState): void {
     this.stateSubject.next(state);
+    this.telemetry?.recordBrokerState(state, this.currentRoomId || undefined);
   }
 
   private isRoomEvent(value: unknown): value is RoomEvent {

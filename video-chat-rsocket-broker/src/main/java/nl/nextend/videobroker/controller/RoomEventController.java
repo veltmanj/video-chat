@@ -3,6 +3,7 @@ package nl.nextend.videobroker.controller;
 import nl.nextend.videobroker.model.RoomEventMessage;
 import nl.nextend.videobroker.model.RoomPublishRequest;
 import nl.nextend.videobroker.model.RoomStreamRequest;
+import nl.nextend.videobroker.observability.BrokerObservability;
 import nl.nextend.videobroker.security.BrokerClientAuthService;
 import nl.nextend.videobroker.service.RoomBrokerService;
 import org.slf4j.Logger;
@@ -26,10 +27,16 @@ public class RoomEventController {
 
     private final RoomBrokerService brokerService;
     private final BrokerClientAuthService brokerClientAuthService;
+    private final BrokerObservability observability;
 
-    public RoomEventController(RoomBrokerService brokerService, BrokerClientAuthService brokerClientAuthService) {
+    public RoomEventController(
+        RoomBrokerService brokerService,
+        BrokerClientAuthService brokerClientAuthService,
+        BrokerObservability observability
+    ) {
         this.brokerService = brokerService;
         this.brokerClientAuthService = brokerClientAuthService;
+        this.observability = observability;
     }
 
     @MessageMapping("room.events.authorize")
@@ -45,9 +52,11 @@ public class RoomEventController {
         return Mono.fromRunnable(() -> brokerClientAuthService.requireAuthorized(request.authToken()))
             .subscribeOn(Schedulers.boundedElastic())
             .thenReturn(Map.of("status", "authorized"))
-            .doOnNext(ignored ->
-                log.info("Authorization accepted: roomId={}, clientId={}", request.roomId(), request.clientLabel())
-            );
+            .doOnNext(ignored -> {
+                observability.recordAuthorization("authorized");
+                log.info("Authorization accepted: roomId={}, clientId={}", request.roomId(), request.clientLabel());
+            })
+            .doOnError(error -> observability.recordAuthorization(resolveAuthorizationOutcome(error)));
     }
 
     @MessageMapping("room.events.publish")
@@ -56,6 +65,7 @@ public class RoomEventController {
      */
     public Mono<Void> publish(RoomPublishRequest request) {
         if (request == null || !request.hasEvent()) {
+            observability.recordInvalidPublish();
             log.warn("Publish route invoked without an event payload");
             return Mono.empty();
         }
@@ -66,7 +76,10 @@ public class RoomEventController {
                 brokerService.publish(request.event())
                     .ifPresentOrElse(
                         this::logPublishedEvent,
-                        () -> log.warn("Publish route invoked with an invalid room event")
+                        () -> {
+                            observability.recordInvalidPublish();
+                            log.warn("Publish route invoked with an invalid room event");
+                        }
                     )
             ));
     }
@@ -84,13 +97,25 @@ public class RoomEventController {
         return Mono.fromRunnable(() -> brokerClientAuthService.requireAuthorized(request.authToken()))
             .subscribeOn(Schedulers.boundedElastic())
             .thenMany(Flux.defer(() -> {
+                observability.recordStreamSubscription();
                 log.info("Stream subscribe: roomId={}, clientId={}", request.roomId(), request.clientLabel());
                 return brokerService.subscribe(request.roomId())
                     .filter(event -> shouldDeliverToClient(event, request.clientLabel()))
                     .doOnCancel(() -> log.info("Stream cancel: roomId={}, clientId={}", request.roomId(), request.clientLabel()))
                     .doOnComplete(() -> log.info("Stream complete: roomId={}, clientId={}", request.roomId(), request.clientLabel()))
-                    .doFinally(signalType -> unregisterDisconnectedClient(request, signalType));
+                    .doFinally(signalType -> {
+                        observability.recordStreamTermination(signalType);
+                        unregisterDisconnectedClient(request, signalType);
+                    });
             }));
+    }
+
+    private String resolveAuthorizationOutcome(Throwable error) {
+        String message = String.valueOf(error == null ? "" : error.getMessage()).toLowerCase();
+        if (message.contains("unauthorized") || message.contains("forbidden") || message.contains("access denied")) {
+            return "denied";
+        }
+        return "error";
     }
 
     private void unregisterDisconnectedClient(RoomStreamRequest request, SignalType signalType) {

@@ -1,6 +1,7 @@
 package nl.nextend.videobroker.service;
 
 import nl.nextend.videobroker.model.RoomEventMessage;
+import nl.nextend.videobroker.observability.BrokerObservability;
 import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
 
@@ -22,7 +23,8 @@ class RoomBrokerServiceTest {
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-03-06T10:15:30Z"), ZoneOffset.UTC);
 
     private final BackofficeForwardingService forwardingService = mock(BackofficeForwardingService.class);
-    private final RoomBrokerService roomBrokerService = new RoomBrokerService(forwardingService, FIXED_CLOCK);
+    private final BrokerObservability observability = mock(BrokerObservability.class);
+    private final RoomBrokerService roomBrokerService = new RoomBrokerService(forwardingService, observability, FIXED_CLOCK);
 
     @Test
     void subscribeShouldExpireStaleParticipantsAndTheirCameras() {
@@ -43,7 +45,7 @@ class RoomBrokerServiceTest {
                 return now.get();
             }
         };
-        RoomBrokerService expiringService = new RoomBrokerService(forwardingService, mutableClock);
+        RoomBrokerService expiringService = new RoomBrokerService(forwardingService, observability, mutableClock);
 
         expiringService.publish(new RoomEventMessage(
             "ROOM_JOINED",
@@ -205,6 +207,7 @@ class RoomBrokerServiceTest {
         assertThat(removed.type()).isEqualTo("ROOM_LEFT");
         assertThat(removed.senderId()).isEqualTo("client-a");
         assertThat(removed.sentAt()).isEqualTo(Instant.parse("2026-03-06T10:15:30Z"));
+        verify(observability).recordPublishedEvent("ROOM_LEFT");
 
         StepVerifier.create(roomBrokerService.subscribe("room-state-2"))
             .expectSubscription()

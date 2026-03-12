@@ -32,3 +32,6 @@ management:
     web:
       exposure:
         include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,info}
+  metrics:
+    tags:
+      application: ${spring.application.name}

@@ -1,6 +1,7 @@
 package nl.nextend.videobroker.service;
 
 import nl.nextend.videobroker.model.RoomEventMessage;
+import nl.nextend.videobroker.observability.BrokerObservability;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
@@ -28,10 +29,12 @@ public class RoomBrokerService {
      */
     private final Map<String, RoomChannel> roomChannels = new ConcurrentHashMap<>();
     private final BackofficeForwardingService forwardingService;
+    private final BrokerObservability observability;
     private final Clock clock;
 
-    public RoomBrokerService(BackofficeForwardingService forwardingService, Clock clock) {
+    public RoomBrokerService(BackofficeForwardingService forwardingService, BrokerObservability observability, Clock clock) {
         this.forwardingService = forwardingService;
+        this.observability = observability;
         this.clock = clock;
     }
 
@@ -58,6 +61,7 @@ public class RoomBrokerService {
         return normalize(event).map(normalizedEvent -> {
             emit(normalizedEvent);
             forwardingService.forward(normalizedEvent);
+            observability.recordPublishedEvent(normalizedEvent.type());
             return normalizedEvent;
         });
     }
@@ -79,6 +83,7 @@ public class RoomBrokerService {
         removedParticipant.ifPresent(event -> {
             emit(event);
             forwardingService.forward(event);
+            observability.recordPublishedEvent(event.type());
         });
         return removedParticipant;
     }
@@ -112,11 +117,14 @@ public class RoomBrokerService {
         RoomChannel freshChannel = new RoomChannel(createRoomSink());
         freshChannel.record(event);
         roomChannels.put(event.roomId(), freshChannel);
+        observability.updateActiveRooms(roomChannels.size());
         freshChannel.emit(event);
     }
 
     private RoomChannel getOrCreateRoomChannel(String roomId) {
-        return roomChannels.computeIfAbsent(roomId, ignored -> new RoomChannel(createRoomSink()));
+        RoomChannel roomChannel = roomChannels.computeIfAbsent(roomId, ignored -> new RoomChannel(createRoomSink()));
+        observability.updateActiveRooms(roomChannels.size());
+        return roomChannel;
     }
 
     private void expireStaleClients(String roomId, RoomChannel roomChannel, Instant now) {
@@ -126,9 +134,11 @@ public class RoomBrokerService {
                 RoomChannel freshChannel = new RoomChannel(createRoomSink());
                 freshChannel.record(event);
                 roomChannels.put(roomId, freshChannel);
+                observability.updateActiveRooms(roomChannels.size());
                 freshChannel.emit(event);
             }
             forwardingService.forward(event);
+            observability.recordPublishedEvent(event.type());
         });
     }
 

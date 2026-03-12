@@ -1,5 +1,5 @@
 import { Injectable, NgZone } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, Subject } from 'rxjs';
 
 declare global {
   interface Window {
@@ -73,6 +73,7 @@ export class AuthService {
   private readonly clientId = resolveGoogleClientId();
   private readonly appMode = resolveAppMode();
   private readonly debugEvents: string[] = [];
+  private readonly debugEventSubject = new Subject<string>();
   private readonly authStateSubject = new BehaviorSubject<boolean>(false);
   private idTokenValue: string | null = null;
   private identityClaimsValue: IdentityClaims = null;
@@ -81,6 +82,7 @@ export class AuthService {
   private buttonRendered = false;
 
   readonly authState$ = this.authStateSubject.asObservable();
+  readonly debugEvents$ = this.debugEventSubject.asObservable();
 
   constructor(private ngZone: NgZone) {
     this.restoreStoredSession();
@@ -144,9 +146,9 @@ export class AuthService {
   }
 
   logout(): void {
+    this.pushDebugEvent('logout');
     this.clearSession();
     window.google?.accounts?.id?.disableAutoSelect();
-    this.pushDebugEvent('logout');
   }
 
   get accessToken(): string | null {
@@ -383,6 +385,7 @@ export class AuthService {
   private pushDebugEvent(event: string): void {
     this.debugEvents.unshift(event);
     this.debugEvents.splice(8);
+    this.debugEventSubject.next(event);
   }
 
   private readStringClaim(...keys: string[]): string | null {

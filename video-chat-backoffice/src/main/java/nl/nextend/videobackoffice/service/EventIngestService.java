@@ -1,6 +1,7 @@
 package nl.nextend.videobackoffice.service;
 
 import nl.nextend.videobackoffice.model.RoomEventMessage;
+import nl.nextend.videobackoffice.observability.BackofficeObservability;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -37,20 +38,25 @@ public class EventIngestService {
         .reversed();
 
     private final Clock clock;
+    private final BackofficeObservability observability;
     /**
      * Each room keeps its own deque so append/trim operations stay isolated and cheap.
      */
     private final Map<String, Deque<RoomEventMessage>> roomEvents = new ConcurrentHashMap<>();
 
-    public EventIngestService(Clock clock) {
+    public EventIngestService(Clock clock, BackofficeObservability observability) {
         this.clock = clock;
+        this.observability = observability;
     }
 
     /**
      * Accepts an event from the broker/backoffice ingest path and stores it if it is structurally usable.
      */
     public void ingest(RoomEventMessage event) {
-        normalize(event).ifPresent(normalizedEvent -> appendToRoom(normalizedEvent.roomId(), normalizedEvent));
+        normalize(event).ifPresent(normalizedEvent -> {
+            appendToRoom(normalizedEvent.roomId(), normalizedEvent);
+            observability.recordIngestedEvent(normalizedEvent.type(), activeRoomCount(), retainedEventCount());
+        });
     }
 
     /**
@@ -79,6 +85,14 @@ public class EventIngestService {
         return roomEvents.keySet().stream().sorted().toList();
     }
 
+    int activeRoomCount() {
+        return roomEvents.size();
+    }
+
+    int retainedEventCount() {
+        return roomEvents.values().stream().mapToInt(Deque::size).sum();
+    }
+
     /**
      * Ensures invalid payloads are ignored and missing timestamps are filled in consistently.
      */
@@ -98,6 +112,7 @@ public class EventIngestService {
         Deque<RoomEventMessage> roomQueue = roomEvents.computeIfAbsent(roomId, ignored -> new ConcurrentLinkedDeque<>());
         roomQueue.addLast(event);
         trimToRetentionLimit(roomQueue);
+        observability.updateRetentionSnapshot(activeRoomCount(), retainedEventCount());
     }
 
     private void trimToRetentionLimit(Deque<RoomEventMessage> roomQueue) {

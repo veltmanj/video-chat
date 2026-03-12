@@ -1,5 +1,6 @@
 package nl.nextend.videobroker.service;
 
+import nl.nextend.videobroker.observability.BrokerObservability;
 import nl.nextend.videobroker.config.BackofficeRoutingProperties;
 import nl.nextend.videobroker.config.BackofficeRoutingProperties.BackofficeEndpoint;
 import nl.nextend.videobroker.model.RoomEventMessage;
@@ -30,11 +31,17 @@ public class BackofficeForwardingService {
 
     private final BackofficeRoutingProperties properties;
     private final RSocketRequester.Builder requesterBuilder;
+    private final BrokerObservability observability;
     private final Map<String, RSocketRequester> requesterCache = new ConcurrentHashMap<>();
 
-    public BackofficeForwardingService(BackofficeRoutingProperties properties, RSocketRequester.Builder requesterBuilder) {
+    public BackofficeForwardingService(
+        BackofficeRoutingProperties properties,
+        RSocketRequester.Builder requesterBuilder,
+        BrokerObservability observability
+    ) {
         this.properties = properties;
         this.requesterBuilder = requesterBuilder;
+        this.observability = observability;
     }
 
     /**
@@ -74,12 +81,15 @@ public class BackofficeForwardingService {
             requester.route(properties.getRoute())
                 .data(event)
                 .retrieveMono(Void.class)
-                .doOnSuccess(ignored -> log.info(
-                    "Forwarded event type={} room={} to {}",
-                    event.type(),
-                    event.roomId(),
-                    endpoint.displayName()
-                ))
+                .doOnSuccess(ignored -> {
+                    observability.recordBackofficeForward(endpoint.displayName(), "success");
+                    log.info(
+                        "Forwarded event type={} room={} to {}",
+                        event.type(),
+                        event.roomId(),
+                        endpoint.displayName()
+                    );
+                })
                 .doOnError(error -> handleSendFailure(endpoint, error))
                 .subscribe();
         } catch (Exception error) {
@@ -90,6 +100,7 @@ public class BackofficeForwardingService {
     private void handleSendFailure(BackofficeEndpoint endpoint, Throwable error) {
         // Force a fresh requester on the next event because the cached connection may be stale.
         requesterCache.remove(endpoint.getUrl());
+        observability.recordBackofficeForward(endpoint.displayName(), "failure");
         log.warn("Failed to forward event to {} ({}): {}", endpoint.displayName(), endpoint.getUrl(), error.getMessage());
     }
 
@@ -106,6 +117,7 @@ public class BackofficeForwardingService {
             }
             return requesterBuilder.transport(transport);
         } catch (Exception error) {
+            observability.recordBackofficeForward(endpointUrl, "requester_error");
             log.warn("Unable to create RSocket requester for {}: {}", endpointUrl, error.getMessage());
             return null;
         }

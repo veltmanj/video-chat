@@ -1,6 +1,7 @@
 package nl.nextend.videobackoffice.service;
 
 import nl.nextend.videobackoffice.model.RoomEventMessage;
+import nl.nextend.videobackoffice.observability.BackofficeObservability;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -10,12 +11,13 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class EventIngestServiceTest {
 
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-03-06T10:15:30Z"), ZoneOffset.UTC);
 
-    private final EventIngestService eventIngestService = new EventIngestService(FIXED_CLOCK);
+    private final EventIngestService eventIngestService = new EventIngestService(FIXED_CLOCK, mock(BackofficeObservability.class));
 
     @Test
     void ingestShouldIgnoreInvalidEvents() {
