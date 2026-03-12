@@ -197,6 +197,16 @@ On startup, the `vault-init` job ensures the configured KV-v2 mount exists and t
 - renders the current runtime secret files into the persistent `vault-runtime` volume
 - mints a scoped broker token that can read only the configured JWT provider paths
 
+Concrete bootstrap sequence:
+
+1. `vault` starts in local dev mode with the configured `VAULT_DEV_ROOT_TOKEN_ID`.
+2. `vault-init` connects with that token, ensures the configured KV-v2 mount exists, and creates `/vault/runtime` on the shared `vault-runtime` volume.
+3. For each runtime secret, `vault-init` resolves a value in this order: explicit `VAULT_BOOTSTRAP_*` env var, matching file under `vault/secrets/`, previously rendered file in `vault-runtime`, generated random fallback.
+4. `vault-init` writes those resolved values into Vault KV so Vault remains the source of truth for the current run.
+5. `vault-init` renders the concrete secret fields back out into `/vault/runtime/*` files for services that only know how to read env vars or `*_FILE` inputs.
+6. `vault-init` writes a least-privilege Vault policy for the broker's JWT-provider reads and mints a fresh scoped token into `/vault/runtime/broker-jwt-vault-token`.
+7. The service-specific launcher scripts under `vault/scripts/start-*-with-vault.sh` read those runtime files and export the env vars each container expects immediately before starting the real process.
+
 - Google uses `VAULT_GOOGLE_JWKS_URL` by default.
 - Apple uses `VAULT_APPLE_JWKS_URL` by default.
 - X uses `VAULT_X_JWKS_URL` when set.
@@ -211,6 +221,20 @@ Runtime secret precedence is:
 - a newly generated random secret
 
 The broker reads provider keys from Vault using a scoped token rendered by `vault-init` instead of sharing the Vault root token with the runtime container.
+
+Rendered runtime files and consumers:
+
+- `/vault/runtime/social-db-password`: consumed by `social-db` via `POSTGRES_PASSWORD_FILE`, by `backoffice` via `SPRING_DATASOURCE_PASSWORD_FILE`, and by the dev seed job via `PGPASSWORD_FILE`
+- `/vault/runtime/minio-root-password`: consumed by `minio` via `MINIO_ROOT_PASSWORD_FILE` and by `backoffice` via `BACKOFFICE_SOCIAL_MEDIA_SECRET_KEY_FILE`
+- `/vault/runtime/grafana-admin-password`: consumed by Grafana via `GF_SECURITY_ADMIN_PASSWORD__FILE`
+- `/vault/runtime/broker-jwt-vault-token`: consumed by the broker launcher and exported as `BROKER_JWT_VAULT_TOKEN`
+
+Why both Vault and runtime files exist:
+
+- Vault is the canonical store used for JWKS data and for the broker's runtime key lookups.
+- Several off-the-shelf images in this stack do not speak Vault directly and only accept env vars or `*_FILE` inputs.
+- The shared `vault-runtime` volume is the handoff point between the one-shot bootstrap job and those long-running containers.
+- Because that volume persists across container recreation, locally generated passwords stay stable unless you explicitly rotate them.
 
 If Grafana generated its password and you need to inspect it locally, run:
 
