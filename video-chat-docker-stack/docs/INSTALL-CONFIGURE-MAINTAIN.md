@@ -54,6 +54,8 @@ Edit `.env` and set at least:
 - `VIDEOCHAT_HOST=<LAN_IP>` for access from another device on the same network
 - `GOOGLE_OAUTH_CLIENT_ID=<your_google_web_client_id>` for Google login
 - `VIDEOCHAT_APP_MODE=production` unless you want developer diagnostics on the login page
+- `VIDEOCHAT_AI_AGENT_ENABLED=true` and `BACKOFFICE_AI_ENABLED=true` to switch on the shared AI room assistant
+- `BACKOFFICE_AI_API_KEY=<your_openai_api_key>` for the shared assistant backend call
 - `VAULT_BOOTSTRAP_GRAFANA_ADMIN_PASSWORD=<strong_local_password>` if you want to pin the Grafana bootstrap credentials
 
 To obtain a Google web client ID:
@@ -104,6 +106,7 @@ Key variables:
 - `VIDEOCHAT_HOST`: host or LAN IP used by Caddy certificate and redirects
 - `GOOGLE_OAUTH_CLIENT_ID`: Google OAuth web client ID injected into the frontend at runtime
 - `VIDEOCHAT_APP_MODE`: frontend login-page mode, `production` or `development`
+- `VIDEOCHAT_AI_AGENT_ENABLED`, `VIDEOCHAT_AI_AGENT_ENDPOINT`, `VIDEOCHAT_AI_AGENT_NAME`, `VIDEOCHAT_AI_AGENT_MENTION`: frontend runtime AI assistant settings
 - `CADDY_IMAGE`: Caddy image tag, default `caddy:2.10.2`
 - `VAULT_IMAGE`: Vault image tag, default `hashicorp/vault:1.17`
 - `PROMETHEUS_IMAGE`, `PROMETHEUS_HOST_PORT`: Prometheus image and local UI binding
@@ -136,6 +139,7 @@ Key variables:
 - `BROKER_JWT_GOOGLE_ENABLED`, `BROKER_JWT_APPLE_ENABLED`, `BROKER_JWT_X_ENABLED`: per-provider broker toggles
 - `BROKER_JWT_GOOGLE_AUDIENCE`: optional Google audience pin; usually set this equal to `GOOGLE_OAUTH_CLIENT_ID`
 - `BACKOFFICE_SOCIAL_GOOGLE_AUDIENCE`: optional Google audience pin used by the social REST APIs
+- `BACKOFFICE_AI_ENABLED`, `BACKOFFICE_AI_API_KEY`, `BACKOFFICE_AI_MODEL`, `BACKOFFICE_AI_ASSISTANT_NAME`: shared AI assistant settings
 
 Recommended defaults:
 

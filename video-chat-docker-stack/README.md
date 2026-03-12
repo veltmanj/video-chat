@@ -7,6 +7,7 @@ Docker Compose stack for the Angular frontend, RSocket broker, Spring Boot backo
 - Angular frontend
 - RSocket broker
 - Backoffice service
+- Shared AI room assistant through the backoffice
 - Prometheus metrics and blackbox probes
 - Loki log storage with Promtail shipping
 - Grafana dashboards
@@ -30,6 +31,7 @@ cp .env.example .env
 - App: `https://<VIDEOCHAT_HOST>`
 - RSocket broker: `wss://<VIDEOCHAT_HOST>/rsocket`
 - Backoffice REST API: `https://<VIDEOCHAT_HOST>/backoffice-api/api/rooms`
+- Shared AI assistant endpoint: `https://<VIDEOCHAT_HOST>/social-api/social/v1/rooms/<roomId>/assistant-replies`
 - Vault API: `http://127.0.0.1:${VAULT_HOST_PORT:-8200}`
 - Prometheus UI: `http://127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}`
 - Grafana: `http://127.0.0.1:${GRAFANA_HOST_PORT:-3000}`
@@ -119,6 +121,7 @@ Key variables:
 - `VIDEOCHAT_HOST`: hostname or LAN IP presented by Caddy
 - `GOOGLE_OAUTH_CLIENT_ID`: Google OAuth web client ID injected into the frontend at container startup
 - `VIDEOCHAT_APP_MODE`: frontend app mode, `production` by default, `development` to show setup diagnostics on the login page
+- `VIDEOCHAT_AI_AGENT_ENABLED`, `VIDEOCHAT_AI_AGENT_ENDPOINT`, `VIDEOCHAT_AI_AGENT_NAME`, `VIDEOCHAT_AI_AGENT_MENTION`: frontend runtime AI settings
 - `CADDY_IMAGE`: Caddy image tag, defaults to `caddy:2.10.2`
 - `CADDY_LOCAL_CA_FILENAME`: exported local CA certificate filename
 - `PROMETHEUS_IMAGE`, `PROMETHEUS_HOST_PORT`: Prometheus image and local UI port
@@ -136,6 +139,7 @@ Key variables:
 - `BROKER_JWT_*`: broker JWT validation toggles, provider enablement, and cache settings
 - `BROKER_JWT_GOOGLE_AUDIENCE`: optional Google audience pin for broker JWT validation; set this to the same value as `GOOGLE_OAUTH_CLIENT_ID`
 - `BACKOFFICE_SOCIAL_GOOGLE_AUDIENCE`: optional Google audience pin used by the social REST APIs
+- `BACKOFFICE_AI_ENABLED`, `BACKOFFICE_AI_API_KEY`, `BACKOFFICE_AI_MODEL`, `BACKOFFICE_AI_ASSISTANT_NAME`: shared AI assistant settings for the backoffice
 - `SOCIAL_DB_IMAGE`, `SOCIAL_DB_CONTAINER_NAME`, `SOCIAL_DB_NAME`, `SOCIAL_DB_USER`, `SOCIAL_DB_VOLUME_NAME`: social database image, identity, and active persistent volume name
 - `SOCIAL_DB_DEV_*`: isolated development database, container, and volume names used by `./scripts/up-dev.sh`
 - `SOCIAL_DB_SEED_*`: development seed controls; set `SOCIAL_DB_SEED_FORCE=true` to rebuild the sample dataset
@@ -187,6 +191,14 @@ Set it manually in `.env`:
 ```bash
 GOOGLE_OAUTH_CLIENT_ID=<your-google-web-client-id>
 docker compose up -d --build frontend
+```
+
+To enable the shared AI assistant in the stack, also set:
+
+```bash
+VIDEOCHAT_AI_AGENT_ENABLED=true
+BACKOFFICE_AI_ENABLED=true
+BACKOFFICE_AI_API_KEY=<your-openai-api-key>
 ```
 
 Or use the helper script:
