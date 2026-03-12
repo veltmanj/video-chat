@@ -91,4 +91,26 @@ public final class SocialApi {
 
     public record GrantAccessResult(List<String> grantedHandles, List<String> missingHandles) {
     }
+
+    public record AssistantContextMessage(
+        @NotBlank @Size(max = 120) String senderName,
+        @NotBlank @Size(max = 2000) String text,
+        String sentAt
+    ) {
+    }
+
+    public record AssistantReplyRequest(
+        @Size(max = 120) String participantName,
+        @NotBlank @Size(max = 2000) String prompt,
+        List<@NotNull AssistantContextMessage> recentMessages
+    ) {
+    }
+
+    public record AssistantReplyResponse(
+        String agentName,
+        String reply,
+        String model,
+        String responseId
+    ) {
+    }
 }

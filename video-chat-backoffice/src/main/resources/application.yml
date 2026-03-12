@@ -26,6 +26,12 @@ management:
       application: ${spring.application.name}
 
 backoffice:
+  ai:
+    enabled: ${BACKOFFICE_AI_ENABLED:false}
+    api-key: ${BACKOFFICE_AI_API_KEY:}
+    model: ${BACKOFFICE_AI_MODEL:gpt-5-mini}
+    assistant-name: ${BACKOFFICE_AI_ASSISTANT_NAME:Pulse Copilot}
+    max-context-messages: ${BACKOFFICE_AI_MAX_CONTEXT_MESSAGES:8}
   social:
     auth:
       google-issuer: ${BACKOFFICE_SOCIAL_GOOGLE_ISSUER:https://accounts.google.com}

@@ -18,10 +18,11 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.util.StringUtils;
+import org.springframework.web.reactive.function.client.WebClient;
 
 @Configuration
 @EnableWebFluxSecurity
-@EnableConfigurationProperties(BackofficeSocialProperties.class)
+@EnableConfigurationProperties({ BackofficeSocialProperties.class, BackofficeAiProperties.class })
 public class SecurityConfig {
 
     @Bean
@@ -48,6 +49,11 @@ public class SecurityConfig {
         );
         decoder.setJwtValidator(validator);
         return decoder;
+    }
+
+    @Bean
+    WebClient.Builder webClientBuilder() {
+        return WebClient.builder();
     }
 
     private OAuth2TokenValidator<Jwt> audienceValidator(String expectedAudience) {

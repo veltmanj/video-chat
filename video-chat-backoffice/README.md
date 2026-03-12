@@ -1,6 +1,6 @@
 # Video Chat Backoffice
 
-Spring Boot backoffice service that accepts room events over RSocket and exposes a lightweight REST API for operational inspection.
+Spring Boot backoffice service that accepts room events over RSocket, exposes operational/social REST APIs, and can generate shared AI room replies.
 
 ## Runtime endpoints
 
@@ -13,6 +13,7 @@ Spring Boot backoffice service that accepts room events over RSocket and exposes
 - Accept `backoffice.room.events.ingest` messages from the broker.
 - Keep a bounded in-memory history per room for debugging and audits.
 - Expose room and event history over REST.
+- Expose an authenticated AI assistant endpoint for shared room replies.
 
 ## Quick start
 
@@ -35,6 +36,10 @@ Primary configuration lives in `src/main/resources/application.yml` and can be o
 - `SERVER_PORT`: HTTP port, defaults to `7901`
 - `BACKOFFICE_RSOCKET_MAPPING_PATH`: RSocket WebSocket path, defaults to `/rsocket`
 - `MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE`: actuator exposure, defaults to `health,info`
+- `BACKOFFICE_AI_ENABLED`: enables the shared AI endpoint
+- `BACKOFFICE_AI_API_KEY`: OpenAI API key used server-side
+- `BACKOFFICE_AI_MODEL`: model name, defaults to `gpt-5-mini`
+- `BACKOFFICE_AI_ASSISTANT_NAME`: display name returned to the frontend, defaults to `Pulse Copilot`
 
 ## Operations guide
 
