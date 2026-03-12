@@ -19,6 +19,8 @@ export interface CameraFeed {
   id: string;
   ownerId: string;
   ownerName: string;
+  publishedFeedId?: string;
+  trackId?: string;
   deviceId?: string;
   label: string;
   stream?: MediaStream;

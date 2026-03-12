@@ -419,6 +419,7 @@ export class WebrtcMeshService {
       id: `remote-${remoteClientId}-${track.id}`,
       ownerId: remoteClientId,
       ownerName: remoteName,
+      trackId: track.id,
       label: `${remoteName} camera`,
       stream: resolvedStream,
       local: false,

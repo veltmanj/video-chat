@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
-import { CameraFeed, ChatMessage, ChatMessagePayload, RoomEvent } from '../models/room.models';
+import { CameraFeed, CameraPublishedPayload, CameraRemovedPayload, ChatMessage, ChatMessagePayload, RoomEvent } from '../models/room.models';
 
 @Injectable({
   providedIn: 'root'
@@ -55,7 +55,27 @@ export class RoomSessionService {
       const nextFeeds = [...feeds];
       const index = nextFeeds.findIndex((item) => item.id === feed.id);
       if (index === -1) {
-        nextFeeds.push(feed);
+        const placeholderIndex = !feed.local
+          ? nextFeeds.findIndex((item) =>
+              !item.local
+              && item.ownerId === feed.ownerId
+              && !!item.publishedFeedId
+              && !item.stream
+            )
+          : -1;
+
+        if (placeholderIndex !== -1) {
+          nextFeeds[placeholderIndex] = {
+            ...nextFeeds[placeholderIndex],
+            ...feed,
+            id: nextFeeds[placeholderIndex].id,
+            publishedFeedId: nextFeeds[placeholderIndex].publishedFeedId ?? feed.publishedFeedId,
+            label: nextFeeds[placeholderIndex].label || feed.label,
+            online: true
+          };
+        } else {
+          nextFeeds.push(feed);
+        }
       } else {
         nextFeeds[index] = feed;
       }
@@ -75,8 +95,22 @@ export class RoomSessionService {
    * Removes a single remote track-backed feed without touching other feeds owned by the same peer.
    */
   removeRemoteTrackFeed(ownerId: string, trackId: string): void {
-    const feedId = this.createRemoteTrackFeedId(ownerId, trackId);
-    this.removeFeed(feedId);
+    this.updateFeeds((feeds) => feeds.flatMap((feed) => {
+      if (feed.ownerId !== ownerId || feed.local || feed.trackId !== trackId) {
+        return [feed];
+      }
+
+      if (feed.publishedFeedId) {
+        return [{
+          ...feed,
+          stream: undefined,
+          trackId: undefined,
+          online: false
+        }];
+      }
+
+      return [];
+    }));
   }
 
   /**
@@ -104,6 +138,31 @@ export class RoomSessionService {
       return;
     }
 
+    const cameraPublishedPayload = this.getCameraPublishedPayload(event);
+    if (cameraPublishedPayload && event.senderId !== localClientId) {
+      if (this.attachPublishedFeedToExistingRemoteTrack(event.senderId, cameraPublishedPayload)) {
+        return;
+      }
+
+      this.upsertRemoteFeed({
+        id: this.createRemotePublishedFeedId(event.senderId, cameraPublishedPayload.feedId),
+        ownerId: event.senderId,
+        ownerName: event.senderName,
+        publishedFeedId: cameraPublishedPayload.feedId,
+        label: cameraPublishedPayload.label || `${event.senderName} camera`,
+        local: false,
+        muted: true,
+        online: true
+      });
+      return;
+    }
+
+    const cameraRemovedPayload = this.getCameraRemovedPayload(event);
+    if (cameraRemovedPayload && event.senderId !== localClientId) {
+      this.markRemoteFeedStopped(event.senderId, cameraRemovedPayload.feedId);
+      return;
+    }
+
     if (event.type === 'ROOM_LEFT') {
       this.removeRemoteFeedsByOwner(event.senderId);
     }
@@ -114,6 +173,10 @@ export class RoomSessionService {
    */
   createRemoteTrackFeedId(ownerId: string, trackId: string): string {
     return 'remote-' + ownerId + '-' + trackId;
+  }
+
+  createRemotePublishedFeedId(ownerId: string, publishedFeedId: string): string {
+    return 'remote-feed-' + ownerId + '-' + publishedFeedId;
   }
 
   /**
@@ -154,5 +217,95 @@ export class RoomSessionService {
     }
 
     return { text: event.payload.text };
+  }
+
+  private getCameraPublishedPayload(event: RoomEvent): CameraPublishedPayload | null {
+    if (
+      event.type !== 'CAMERA_PUBLISHED'
+      || !event.payload
+      || typeof event.payload !== 'object'
+      || !('feedId' in event.payload)
+      || typeof event.payload.feedId !== 'string'
+    ) {
+      return null;
+    }
+
+    const label = 'label' in event.payload && typeof event.payload.label === 'string'
+      ? event.payload.label
+      : `${event.senderName} camera`;
+
+    return {
+      feedId: event.payload.feedId,
+      deviceId: 'deviceId' in event.payload && typeof event.payload.deviceId === 'string'
+        ? event.payload.deviceId
+        : undefined,
+      label
+    };
+  }
+
+  private getCameraRemovedPayload(event: RoomEvent): CameraRemovedPayload | null {
+    if (
+      event.type !== 'CAMERA_REMOVED'
+      || !event.payload
+      || typeof event.payload !== 'object'
+      || !('feedId' in event.payload)
+      || typeof event.payload.feedId !== 'string'
+    ) {
+      return null;
+    }
+
+    return { feedId: event.payload.feedId };
+  }
+
+  private markRemoteFeedStopped(ownerId: string, publishedFeedId: string): void {
+    this.updateFeeds((feeds) => feeds.map((feed) => {
+      if (
+        feed.local
+        || feed.ownerId !== ownerId
+        || feed.publishedFeedId !== publishedFeedId
+      ) {
+        return feed;
+      }
+
+      return {
+        ...feed,
+        stream: undefined,
+        trackId: undefined,
+        online: false
+      };
+    }));
+  }
+
+  private attachPublishedFeedToExistingRemoteTrack(ownerId: string, payload: CameraPublishedPayload): boolean {
+    let matchedFeed = false;
+
+    this.updateFeeds((feeds) => {
+      const candidateFeeds = feeds.filter((feed) =>
+        !feed.local
+        && feed.ownerId === ownerId
+        && !feed.publishedFeedId
+        && !!feed.stream
+      );
+
+      if (candidateFeeds.length !== 1) {
+        return feeds;
+      }
+
+      matchedFeed = true;
+      return feeds.map((feed) => {
+        if (feed !== candidateFeeds[0]) {
+          return feed;
+        }
+
+        return {
+          ...feed,
+          id: this.createRemotePublishedFeedId(ownerId, payload.feedId),
+          publishedFeedId: payload.feedId,
+          label: payload.label || `${feed.ownerName} camera`
+        };
+      });
+    });
+
+    return matchedFeed;
   }
 }
