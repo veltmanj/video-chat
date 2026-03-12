@@ -1,12 +1,15 @@
 # Video Chat Docker Stack
 
-Docker Compose stack for the Angular frontend, RSocket broker, Spring Boot backoffice, HashiCorp Vault, and Caddy reverse proxy with locally trusted HTTPS.
+Docker Compose stack for the Angular frontend, RSocket broker, Spring Boot backoffice, HashiCorp Vault, Prometheus, Loki, Grafana, and Caddy reverse proxy with locally trusted HTTPS.
 
 ## Included services
 
 - Angular frontend
 - RSocket broker
 - Backoffice service
+- Prometheus metrics and blackbox probes
+- Loki log storage with Promtail shipping
+- Grafana dashboards
 - HashiCorp Vault with provider JWKS bootstrap
 - Caddy reverse proxy with `tls internal`
 
@@ -28,6 +31,8 @@ cp .env.example .env
 - RSocket broker: `wss://<VIDEOCHAT_HOST>/rsocket`
 - Backoffice REST API: `https://<VIDEOCHAT_HOST>/backoffice-api/api/rooms`
 - Vault API: `http://127.0.0.1:${VAULT_HOST_PORT:-8200}`
+- Prometheus UI: `http://127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}`
+- Grafana: `http://127.0.0.1:${GRAFANA_HOST_PORT:-3000}`
 - Local CA download: `http://<VIDEOCHAT_HOST>/local-ca.crt`
 
 ## Common operations
@@ -80,6 +85,18 @@ Check service health and published ports:
 ./scripts/check.sh
 ```
 
+Run the monitoring smoke test:
+
+```bash
+./scripts/monitoring-smoke.sh
+```
+
+Open Grafana:
+
+```bash
+open http://127.0.0.1:${GRAFANA_HOST_PORT:-3000}
+```
+
 Run the authenticated social media smoke test:
 
 ```bash
@@ -104,15 +121,25 @@ Key variables:
 - `VIDEOCHAT_APP_MODE`: frontend app mode, `production` by default, `development` to show setup diagnostics on the login page
 - `CADDY_IMAGE`: Caddy image tag, defaults to `caddy:2.10.2`
 - `CADDY_LOCAL_CA_FILENAME`: exported local CA certificate filename
+- `PROMETHEUS_IMAGE`, `PROMETHEUS_HOST_PORT`: Prometheus image and local UI port
+- `BLACKBOX_EXPORTER_IMAGE`: blackbox probe image used by Prometheus
+- `LOKI_IMAGE`: Loki image for centralized log storage
+- `PROMTAIL_IMAGE`: Promtail image for Docker log shipping
+- `GRAFANA_IMAGE`, `GRAFANA_HOST_PORT`: Grafana image and local UI port
+- `GRAFANA_ADMIN_USER`: Grafana login username
+- `GRAFANA_ADMIN_PASSWORD`: optional local convenience alias for the Grafana bootstrap password
 - `VAULT_IMAGE`: Vault image tag, defaults to `hashicorp/vault:1.17`
-- `VAULT_DEV_ROOT_TOKEN_ID`: local Vault token shared by the bootstrap job and broker
+- `VAULT_DEV_ROOT_TOKEN_ID`: local-dev-only Vault bootstrap token
+- `VAULT_BOOTSTRAP_SOCIAL_DB_PASSWORD`, `VAULT_BOOTSTRAP_MINIO_ROOT_PASSWORD`, `VAULT_BOOTSTRAP_GRAFANA_ADMIN_PASSWORD`: optional bootstrap secrets that `vault-init` writes into Vault on first run
+- `VAULT_SOCIAL_DB_SECRET_PATH`, `VAULT_MINIO_SECRET_PATH`, `VAULT_GRAFANA_SECRET_PATH`: Vault KV paths used for the stack-managed runtime secrets
 - `VAULT_GOOGLE_JWKS_URL`, `VAULT_APPLE_JWKS_URL`, `VAULT_X_JWKS_URL`: JWKS sources written into Vault
 - `BROKER_JWT_*`: broker JWT validation toggles, provider enablement, and cache settings
 - `BROKER_JWT_GOOGLE_AUDIENCE`: optional Google audience pin for broker JWT validation; set this to the same value as `GOOGLE_OAUTH_CLIENT_ID`
 - `BACKOFFICE_SOCIAL_GOOGLE_AUDIENCE`: optional Google audience pin used by the social REST APIs
-- `SOCIAL_DB_*`: social database image, credentials, and active persistent volume name
+- `SOCIAL_DB_IMAGE`, `SOCIAL_DB_CONTAINER_NAME`, `SOCIAL_DB_NAME`, `SOCIAL_DB_USER`, `SOCIAL_DB_VOLUME_NAME`: social database image, identity, and active persistent volume name
 - `SOCIAL_DB_DEV_*`: isolated development database, container, and volume names used by `./scripts/up-dev.sh`
 - `SOCIAL_DB_SEED_*`: development seed controls; set `SOCIAL_DB_SEED_FORCE=true` to rebuild the sample dataset
+- The implementation scripts are grouped by concern under [`scripts/README.md`](./scripts/README.md); the familiar top-level commands in `./scripts/*.sh` remain stable wrappers.
 
 Security drill:
 
@@ -125,6 +152,15 @@ Social media smoke test:
 - Run `./scripts/social-media-smoke.sh` with `SOCIAL_BEARER_TOKEN` set to a real Google ID token from the running app session.
 - The script exercises `me`, media upload, post creation, feed hydration, media download, and database attachment checks through Caddy.
 - The script creates one smoke-test post and does not delete it.
+
+Monitoring:
+
+- Grafana is provisioned with Prometheus and Loki data sources on first start.
+- `Video Chat Stack Overview` shows Spring metrics plus blackbox health probes for the local services.
+- `Video Chat Service Logs` aggregates Docker container logs from the compose project.
+- `./scripts/check.sh` prints the current Prometheus targets, Loki readiness, and Grafana dashboard inventory.
+- `./scripts/monitoring-smoke.sh` performs a stricter end-to-end monitoring verification, including a fresh backoffice log event that must appear in both Prometheus and Loki.
+- `./scripts/cleanup.sh --rotate-secrets --rebuild` resets the full Docker state, rotates local bootstrap secrets in `.env`, and rebuilds the stack from a clean slate.
 
 ## Google OAuth
 
@@ -185,15 +221,36 @@ To replace the seeded dataset with a production backup inside the isolated dev d
 ./scripts/reload-prod-social-db.sh ./backups/social-db-<timestamp>.dump
 ```
 
-## Vault-backed JWT validation
+## Vault-backed runtime secrets
 
-The stack starts a local Vault dev server and a one-shot `vault-init` job. That job writes provider JWKS documents into Vault before the broker starts:
+The stack starts a local Vault dev server and a one-shot `vault-init` job. That job:
+
+- writes provider JWKS documents into Vault before the broker starts
+- bootstraps the social database password, MinIO root password, and Grafana admin password into Vault
+- renders runtime secret files into the persistent `vault-runtime` volume so the containers can start without keeping those secrets in `.env`
+- mints a scoped broker token that can read only the configured JWT provider paths
+
+Provider bootstrap defaults:
 
 - Google defaults to `https://www.googleapis.com/oauth2/v3/certs`
 - Apple defaults to `https://appleid.apple.com/auth/keys`
 - X uses `VAULT_X_JWKS_URL` when set, or a local `vault/secrets/x-jwks.json` file if present
 
 Any provider can be overridden by placing `google-jwks.json`, `apple-jwks.json`, or `x-jwks.json` in `vault/secrets/`. Local files win over remote URLs.
+
+Runtime secret bootstrap precedence is:
+
+- explicit `VAULT_BOOTSTRAP_*` values from `.env`
+- `GRAFANA_ADMIN_PASSWORD` for Grafana only, when the Vault-specific bootstrap variable is empty
+- matching files in `vault/secrets/`
+- persisted values already present in the `vault-runtime` volume
+- a newly generated random secret
+
+If you let Grafana generate its password, you can read the current value with:
+
+```bash
+docker compose exec -T grafana sh -lc 'cat /vault/runtime/grafana-admin-password'
+```
 
 ## Operations guide
 

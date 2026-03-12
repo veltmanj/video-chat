@@ -7,6 +7,9 @@ This repository packages the full local deployment stack for the video chat syst
 - Angular frontend
 - Spring Boot RSocket broker
 - Spring Boot backoffice
+- Prometheus and blackbox-exporter for metrics and endpoint probes
+- Loki and Promtail for log aggregation
+- Grafana for dashboards
 - HashiCorp Vault for provider JWKS storage
 - Caddy reverse proxy with locally trusted HTTPS
 
@@ -51,6 +54,7 @@ Edit `.env` and set at least:
 - `VIDEOCHAT_HOST=<LAN_IP>` for access from another device on the same network
 - `GOOGLE_OAUTH_CLIENT_ID=<your_google_web_client_id>` for Google login
 - `VIDEOCHAT_APP_MODE=production` unless you want developer diagnostics on the login page
+- `VAULT_BOOTSTRAP_GRAFANA_ADMIN_PASSWORD=<strong_local_password>` if you want to pin the Grafana bootstrap credentials
 
 To obtain a Google web client ID:
 
@@ -102,6 +106,13 @@ Key variables:
 - `VIDEOCHAT_APP_MODE`: frontend login-page mode, `production` or `development`
 - `CADDY_IMAGE`: Caddy image tag, default `caddy:2.10.2`
 - `VAULT_IMAGE`: Vault image tag, default `hashicorp/vault:1.17`
+- `PROMETHEUS_IMAGE`, `PROMETHEUS_HOST_PORT`: Prometheus image and local UI binding
+- `BLACKBOX_EXPORTER_IMAGE`: probe exporter image used by Prometheus
+- `LOKI_IMAGE`: Loki image used for Docker log aggregation
+- `PROMTAIL_IMAGE`: Promtail image used to ship Docker logs into Loki
+- `GRAFANA_IMAGE`, `GRAFANA_HOST_PORT`: Grafana image and local UI binding
+- `GRAFANA_ADMIN_USER`: Grafana login username
+- `GRAFANA_ADMIN_PASSWORD`: optional compatibility alias for the Grafana bootstrap password
 - `FRONTEND_CONTAINER_NAME`: frontend container name
 - `BROKER_CONTAINER_NAME`: broker container name
 - `BACKOFFICE_CONTAINER_NAME`: backoffice container name
@@ -110,13 +121,15 @@ Key variables:
 - `VAULT_INIT_CONTAINER_NAME`: Vault bootstrap container name
 - `CADDY_LOCAL_CA_FILENAME`: exported local CA filename
 - `VAULT_HOST_PORT`: local Vault port binding, default `8200`
-- `VAULT_DEV_ROOT_TOKEN_ID`: local Vault root token
+- `VAULT_DEV_ROOT_TOKEN_ID`: local-dev-only Vault bootstrap token
 - `VAULT_KV_MOUNT`: Vault KV-v2 mount, default `secret`
 - `VAULT_PROVIDER_FIELD`: field name used to store JWKS JSON, default `jwks_json`
+- `VAULT_BOOTSTRAP_SOCIAL_DB_PASSWORD`, `VAULT_BOOTSTRAP_MINIO_ROOT_PASSWORD`, `VAULT_BOOTSTRAP_GRAFANA_ADMIN_PASSWORD`: optional bootstrap secrets written into Vault by `vault-init`
+- `VAULT_SOCIAL_DB_SECRET_PATH`, `VAULT_MINIO_SECRET_PATH`, `VAULT_GRAFANA_SECRET_PATH`: Vault KV paths for the stack-managed runtime secrets
 - `VAULT_GOOGLE_SECRET_PATH`, `VAULT_APPLE_SECRET_PATH`, `VAULT_X_SECRET_PATH`: Vault secret paths used by the broker
 - `VAULT_GOOGLE_JWKS_URL`, `VAULT_APPLE_JWKS_URL`, `VAULT_X_JWKS_URL`: JWKS bootstrap URLs
 - `BROKER_JWT_ENABLED`, `BROKER_JWT_CACHE_TTL`, `BROKER_JWT_CLOCK_SKEW`: broker JWT validation controls
-- `SOCIAL_DB_IMAGE`, `SOCIAL_DB_CONTAINER_NAME`, `SOCIAL_DB_NAME`, `SOCIAL_DB_USER`, `SOCIAL_DB_PASSWORD`: primary social database settings
+- `SOCIAL_DB_IMAGE`, `SOCIAL_DB_CONTAINER_NAME`, `SOCIAL_DB_NAME`, `SOCIAL_DB_USER`: primary social database settings
 - `SOCIAL_DB_VOLUME_NAME`: active social database volume name
 - `SOCIAL_DB_SEED_CONTAINER_NAME`, `SOCIAL_DB_SEED_ENABLED`, `SOCIAL_DB_SEED_FORCE`: development seed job controls
 - `SOCIAL_DB_DEV_NAME`, `SOCIAL_DB_DEV_CONTAINER_NAME`, `SOCIAL_DB_DEV_VOLUME_NAME`, `SOCIAL_DB_DEV_SEED_CONTAINER_NAME`: isolated dev social database settings
@@ -130,13 +143,14 @@ Recommended defaults:
 - Keep `BROKER_JWT_APPLE_ENABLED=false` and `BROKER_JWT_X_ENABLED=false` unless those providers are actually configured and in use.
 - Set `BROKER_JWT_GOOGLE_AUDIENCE` to the same value as `GOOGLE_OAUTH_CLIENT_ID` once the client ID is known.
 - Leave `SOCIAL_DB_SEED_ENABLED=false` in `.env`; `./scripts/up-dev.sh` enables it only for the dev-mode startup invocation.
+- The implementation scripts are grouped by concern under [`scripts/README.md`](../scripts/README.md); the familiar top-level commands in `./scripts/*.sh` remain stable wrappers for local usage and container mounts.
 
 ### 5.2 `docker-compose.yml`
 
 Responsibilities:
 
 - builds the frontend, broker, and backoffice from sibling repos
-- starts a local Vault dev server, a one-shot JWKS bootstrap job, and an optional dev-only social seed job
+- starts a local Vault dev server, a one-shot Vault bootstrap job for JWKS and runtime secrets, and an optional dev-only social seed job
 - attaches all services to the shared `videochat-network`
 - waits for Vault bootstrap, broker, and backoffice health checks before starting Caddy
 - mounts the Caddy config and exported local CA certificate
@@ -170,18 +184,39 @@ Assuming `VIDEOCHAT_HOST=<VIDEOCHAT_HOST>`:
 - broker websocket endpoint: `wss://<VIDEOCHAT_HOST>/rsocket`
 - backoffice API: `https://<VIDEOCHAT_HOST>/backoffice-api/api/rooms`
 - Vault API: `http://127.0.0.1:${VAULT_HOST_PORT:-8200}`
+- Prometheus UI: `http://127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}`
+- Grafana UI: `http://127.0.0.1:${GRAFANA_HOST_PORT:-3000}`
 - CA download: `http://<VIDEOCHAT_HOST>/local-ca.crt`
 
-## 6.1 Vault provider key bootstrap
+## 6.1 Vault-backed runtime bootstrap
 
-On startup, the `vault-init` job ensures the configured KV-v2 mount exists and writes provider JWKS documents into Vault:
+On startup, the `vault-init` job ensures the configured KV-v2 mount exists and then:
+
+- writes provider JWKS documents into Vault
+- writes the social database password, MinIO root password, and Grafana admin password into Vault
+- renders the current runtime secret files into the persistent `vault-runtime` volume
+- mints a scoped broker token that can read only the configured JWT provider paths
 
 - Google uses `VAULT_GOOGLE_JWKS_URL` by default.
 - Apple uses `VAULT_APPLE_JWKS_URL` by default.
 - X uses `VAULT_X_JWKS_URL` when set.
 - Any provider can be overridden by adding `google-jwks.json`, `apple-jwks.json`, or `x-jwks.json` to `vault/secrets/`.
 
-The broker reads those secrets from Vault instead of from static public-key configuration.
+Runtime secret precedence is:
+
+- explicit `VAULT_BOOTSTRAP_*` values from `.env`
+- `GRAFANA_ADMIN_PASSWORD` for Grafana only, when `VAULT_BOOTSTRAP_GRAFANA_ADMIN_PASSWORD` is empty
+- matching files in `vault/secrets/`
+- persisted values already present in the `vault-runtime` volume
+- a newly generated random secret
+
+The broker reads provider keys from Vault using a scoped token rendered by `vault-init` instead of sharing the Vault root token with the runtime container.
+
+If Grafana generated its password and you need to inspect it locally, run:
+
+```bash
+docker compose exec -T grafana sh -lc 'cat /vault/runtime/grafana-admin-password'
+```
 
 ## 7. Validation and test commands
 
@@ -195,6 +230,12 @@ Render the final compose config:
 
 ```bash
 docker compose config
+```
+
+Clean-sheet reset with local secret rotation:
+
+```bash
+./scripts/cleanup.sh --rotate-secrets --rebuild
 ```
 
 Start or rebuild the full stack:
@@ -257,6 +298,18 @@ Run the built-in health and route checks:
 ./scripts/check.sh
 ```
 
+Run the monitoring smoke test:
+
+```bash
+./scripts/monitoring-smoke.sh
+```
+
+Open Grafana:
+
+```bash
+open http://127.0.0.1:${GRAFANA_HOST_PORT:-3000}
+```
+
 Run the authenticated social media smoke test:
 
 ```bash
@@ -269,6 +322,30 @@ Show service status:
 
 ```bash
 docker compose ps
+```
+
+Check Prometheus readiness:
+
+```bash
+curl -fsS http://127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}/-/ready
+```
+
+Check Grafana health:
+
+```bash
+curl -fsS http://127.0.0.1:${GRAFANA_HOST_PORT:-3000}/api/health
+```
+
+Inspect Loki labels through the query API:
+
+```bash
+docker run --rm --network videochat-network curlimages/curl:8.8.0 -fsS http://loki:3100/loki/api/v1/labels
+```
+
+Run the end-to-end monitoring smoke test:
+
+```bash
+./scripts/monitoring-smoke.sh
 ```
 
 Follow logs for the whole stack:

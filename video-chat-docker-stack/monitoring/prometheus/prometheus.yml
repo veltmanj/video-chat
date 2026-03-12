@@ -1,0 +1,61 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - prometheus:9090
+
+  - job_name: broker-actuator
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - broker:9898
+
+  - job_name: backoffice-actuator
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - backoffice:7901
+
+  - job_name: blackbox-http
+    metrics_path: /probe
+    params:
+      module:
+        - http_2xx
+    static_configs:
+      - targets:
+          - http://frontend:80/
+          - http://broker:9898/actuator/health
+          - http://backoffice:7901/actuator/health
+          - http://minio:9000/minio/health/live
+          - http://vault:8200/v1/sys/health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  - job_name: blackbox-tcp
+    metrics_path: /probe
+    params:
+      module:
+        - tcp_connect
+    static_configs:
+      - targets:
+          - social-db:5432
+          - minio:9000
+          - vault:8200
+          - broker:9898
+          - backoffice:7901
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
