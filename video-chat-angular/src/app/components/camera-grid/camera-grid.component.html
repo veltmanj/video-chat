@@ -3,7 +3,7 @@
     <header class="tile-header">
       <div>
         <h3>{{ feed.ownerName }}</h3>
-        <p>{{ feed.label }}</p>
+        <p>{{ getFeedSubtitle(feed) }}</p>
       </div>
       <span class="badge" [class.badge-local]="feed.local">{{ feed.local ? 'LOCAL' : 'REMOTE' }}</span>
     </header>
@@ -18,9 +18,9 @@
         [attr.data-feed-id]="feed.id">
       </video>
 
-      <div class="placeholder" *ngIf="!feed.stream">
-        <div class="pulse"></div>
-        <p>Wachten op stream...</p>
+      <div class="placeholder" [class.placeholder-offline]="!feed.online" *ngIf="!feed.stream">
+        <div class="pulse" [class.pulse-offline]="!feed.online"></div>
+        <p>{{ feed.online ? 'Wachten op stream...' : 'Offline' }}</p>
       </div>
     </div>
 

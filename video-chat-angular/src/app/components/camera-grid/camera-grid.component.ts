@@ -15,6 +15,10 @@ export class CameraGridComponent implements AfterViewChecked {
 
   @ViewChildren('feedVideo') private videoElements!: QueryList<ElementRef<HTMLVideoElement>>;
 
+  getFeedSubtitle(feed: CameraFeed): string {
+    return feed.local ? feed.label : `Camera van ${feed.ownerName}`;
+  }
+
   ngAfterViewChecked(): void {
     if (!this.videoElements) {
       return;

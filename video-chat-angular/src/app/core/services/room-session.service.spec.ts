@@ -188,4 +188,54 @@ describe('RoomSessionService', () => {
     }));
   });
 
+  it('reuses the same published tile when renegotiation delivers a replacement remote track', () => {
+    service.consumeRoomEvent({
+      type: 'CAMERA_PUBLISHED',
+      roomId: 'room-1',
+      senderId: 'remote-1',
+      senderName: 'Remote',
+      sentAt: new Date().toISOString(),
+      payload: {
+        feedId: 'feed-remote-1',
+        label: 'FaceTime HD Camera'
+      }
+    }, 'local-1');
+
+    service.upsertRemoteFeed({
+      id: service.createRemoteTrackFeedId('remote-1', 'track-1'),
+      ownerId: 'remote-1',
+      ownerName: 'Remote',
+      trackId: 'track-1',
+      label: 'Remote fallback label',
+      stream: {} as MediaStream,
+      local: false,
+      muted: true,
+      online: true
+    });
+
+    service.upsertRemoteFeed({
+      id: service.createRemoteTrackFeedId('remote-1', 'track-2'),
+      ownerId: 'remote-1',
+      ownerName: 'Remote',
+      trackId: 'track-2',
+      label: 'Remote fallback label',
+      stream: {} as MediaStream,
+      local: false,
+      muted: true,
+      online: true
+    });
+
+    let feedsSnapshot: CameraFeed[] = [];
+    service.feeds$.subscribe((feeds) => (feedsSnapshot = feeds)).unsubscribe();
+
+    expect(feedsSnapshot).toHaveLength(1);
+    expect(feedsSnapshot[0]).toEqual(expect.objectContaining({
+      id: service.createRemotePublishedFeedId('remote-1', 'feed-remote-1'),
+      ownerId: 'remote-1',
+      publishedFeedId: 'feed-remote-1',
+      trackId: 'track-2',
+      stream: expect.any(Object),
+      online: true
+    }));
+  });
 });

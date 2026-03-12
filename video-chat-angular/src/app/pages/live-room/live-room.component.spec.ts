@@ -1,6 +1,7 @@
+// @vitest-environment jsdom
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BehaviorSubject, Subject } from 'rxjs';
-import { type MockedObject, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockedObject, vi } from 'vitest';
 import { CameraFeed, ChatMessage, ConnectionState, RoomEvent } from '../../core/models/room.models';
 import { AuthService } from '../../core/services/auth.service';
 import { MediaDeviceService } from '../../core/services/media-device.service';
