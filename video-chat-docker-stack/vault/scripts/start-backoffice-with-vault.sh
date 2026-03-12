@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 
+# Backoffice itself does not read from Vault. This launcher translates the runtime files rendered by
+# vault-init into the plain env vars Spring Boot expects before starting the JVM.
+
 read_secret_file() {
   secret_file="$1"
   secret_label="$2"
@@ -16,6 +19,8 @@ read_secret_file() {
 SPRING_DATASOURCE_PASSWORD_FILE="${SPRING_DATASOURCE_PASSWORD_FILE:-/vault/runtime/social-db-password}"
 BACKOFFICE_SOCIAL_MEDIA_SECRET_KEY_FILE="${BACKOFFICE_SOCIAL_MEDIA_SECRET_KEY_FILE:-/vault/runtime/minio-root-password}"
 
+# Only hydrate the env var when an explicit value was not provided. That keeps manual overrides
+# possible while making the Vault-rendered runtime file the normal path.
 if [ -z "${SPRING_DATASOURCE_PASSWORD:-}" ]; then
   SPRING_DATASOURCE_PASSWORD="$(read_secret_file "${SPRING_DATASOURCE_PASSWORD_FILE}" "Spring datasource password")"
   export SPRING_DATASOURCE_PASSWORD

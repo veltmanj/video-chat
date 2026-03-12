@@ -1,6 +1,16 @@
 #!/bin/sh
 set -eu
 
+# Bootstraps the local Vault dev server for the rest of the compose stack.
+# The flow is:
+# 1. Ensure the KV-v2 mount and the shared runtime-volume directory exist.
+# 2. Resolve runtime secrets from env/files/persisted runtime state or generate them.
+# 3. Write those secrets into Vault as the canonical source of truth.
+# 4. Render the current secret values back out into /vault/runtime for containers that only know
+#    how to read env vars or *_FILE inputs.
+# 5. Load provider JWKS documents into Vault and mint a scoped broker token that can read only
+#    those JWT provider paths.
+
 VAULT_ADDR="${VAULT_ADDR:-http://vault:8200}"
 VAULT_TOKEN="${VAULT_TOKEN:?VAULT_TOKEN is required}"
 VAULT_KV_MOUNT="${VAULT_KV_MOUNT:-secret}"
@@ -15,6 +25,9 @@ export VAULT_ADDR
 export VAULT_TOKEN
 
 ensure_runtime_dir() {
+  # This shared volume is the bridge between the one-shot bootstrap container and the long-running
+  # services. Files here persist across container recreation, which lets later boots reuse the same
+  # generated secrets instead of silently rotating them.
   mkdir -p "${VAULT_RUNTIME_DIR}"
   chmod 755 "${VAULT_RUNTIME_DIR}"
 }
@@ -41,6 +54,10 @@ resolve_secret() {
   length="$4"
   label="$5"
 
+  # Precedence matters because these secrets may already exist in several places:
+  # explicit env override -> checked-in/locally managed bootstrap file -> previously rendered runtime
+  # file -> generated fallback. The runtime-file step keeps generated local passwords stable across
+  # rebuilds even though the Vault dev server itself is ephemeral.
   if [ -n "${env_value}" ]; then
     echo "Using ${label} from environment" >&2
     printf '%s' "${env_value}"
@@ -66,6 +83,9 @@ resolve_secret() {
 store_runtime_secret() {
   secret_path="$1"
   shift
+
+  # Vault remains the canonical store. Runtime files are just a projection for containers that do
+  # not talk to Vault themselves.
   vault kv put -mount="${VAULT_KV_MOUNT}" "${secret_path}" "$@" >/dev/null
   echo "Stored ${secret_path} in ${VAULT_KV_MOUNT}/${secret_path}"
 }
@@ -75,6 +95,7 @@ render_runtime_file() {
   secret_field="$2"
   runtime_file="$3"
 
+  # Render atomically so services never observe a partially written secret file.
   temp_file="$(mktemp)"
   vault kv get -mount="${VAULT_KV_MOUNT}" -field="${secret_field}" "${secret_path}" >"${temp_file}"
   chmod 644 "${temp_file}"
@@ -84,6 +105,9 @@ render_runtime_file() {
 
 write_broker_policy() {
   policy_file="$(mktemp)"
+
+  # The broker should not inherit the Vault root/dev token. Instead it gets a least-privilege
+  # policy that can read only the configured provider JWKS documents.
   cat >"${policy_file}" <<EOF
 path "${VAULT_KV_MOUNT}/data/${VAULT_GOOGLE_SECRET_PATH:-jwt/providers/google}" {
   capabilities = ["read"]
@@ -107,6 +131,8 @@ render_broker_token() {
   runtime_file="${VAULT_RUNTIME_DIR}/broker-jwt-vault-token"
   temp_file="$(mktemp)"
 
+  # The broker launcher reads this file and exports BROKER_JWT_VAULT_TOKEN just before the Java
+  # process starts.
   vault token create -orphan -policy="${VAULT_BROKER_POLICY_NAME}" -field=token >"${temp_file}"
   chmod 644 "${temp_file}"
   mv "${temp_file}" "${runtime_file}"
@@ -114,6 +140,9 @@ render_broker_token() {
 }
 
 bootstrap_runtime_secrets() {
+  # Resolve each secret once, write it into Vault, then render the concrete file consumed by the
+  # runtime services. This keeps service startup simple while still centralizing the secret values in
+  # Vault.
   social_db_password="$(resolve_secret \
     "${VAULT_BOOTSTRAP_SOCIAL_DB_PASSWORD:-${SOCIAL_DB_PASSWORD:-}}" \
     "/vault/secrets/social-db-password" \
@@ -159,6 +188,8 @@ load_provider() {
   source_file="/vault/secrets/${provider_name}-jwks.json"
   temp_file=""
 
+  # Provider keys can come from a committed/local JSON file or be fetched from the configured JWKS
+  # URL. Either way they end up in the same Vault KV path for the broker to read.
   if [ -s "${source_file}" ]; then
     temp_file="${source_file}"
     echo "Loading ${provider_name} JWKS from ${source_file}"
@@ -183,6 +214,9 @@ load_provider() {
   [ "${temp_file}" = "${source_file}" ] || rm -f "${temp_file}"
 }
 
+# Keep the execution order explicit: the runtime volume and secret values must exist before any
+# service launcher tries to read /vault/runtime/*, and the broker token must be minted after the
+# read policy is updated.
 ensure_runtime_dir
 ensure_kv_mount
 bootstrap_runtime_secrets

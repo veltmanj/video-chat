@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+# The seed job uses psql tooling that expects PGPASSWORD. vault-init renders the shared database
+# password to /vault/runtime/social-db-password and this wrapper turns that file back into the env
+# var before handing off to the actual seed script.
+
 PGPASSWORD_FILE="${PGPASSWORD_FILE:-/vault/runtime/social-db-password}"
 
 if [ -z "${PGPASSWORD:-}" ]; then
