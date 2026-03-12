@@ -119,7 +119,7 @@ public class RoomEventController {
     }
 
     private void unregisterDisconnectedClient(RoomStreamRequest request, SignalType signalType) {
-        if (signalType == SignalType.ON_ERROR || !request.hasRoomId()) {
+        if (!request.hasRoomId()) {
             return;
         }
 
