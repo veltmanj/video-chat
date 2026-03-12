@@ -63,7 +63,8 @@ describe('RoomSessionService', () => {
       sentAt: new Date().toISOString(),
       payload: {
         feedId: 'feed-remote-1',
-        label: 'Remote camera'
+        label: 'Remote camera',
+        profileImageUrl: 'https://example.com/remote.png'
       }
     };
 
@@ -100,6 +101,7 @@ describe('RoomSessionService', () => {
       expect.objectContaining({
         id: service.createRemotePublishedFeedId('remote-1', 'feed-remote-1'),
         ownerId: 'remote-1',
+        ownerProfileImageUrl: 'https://example.com/remote.png',
         publishedFeedId: 'feed-remote-1',
         trackId: undefined,
         label: 'Remote camera',
@@ -170,7 +172,8 @@ describe('RoomSessionService', () => {
       sentAt: new Date().toISOString(),
       payload: {
         feedId: 'feed-remote-1',
-        label: 'FaceTime HD Camera'
+        label: 'FaceTime HD Camera',
+        profileImageUrl: 'https://example.com/remote.png'
       }
     }, 'local-1');
 
@@ -181,6 +184,7 @@ describe('RoomSessionService', () => {
     expect(feedsSnapshot[0]).toEqual(expect.objectContaining({
       id: service.createRemotePublishedFeedId('remote-1', 'feed-remote-1'),
       ownerId: 'remote-1',
+      ownerProfileImageUrl: 'https://example.com/remote.png',
       publishedFeedId: 'feed-remote-1',
       trackId: 'track-1',
       stream: expect.any(Object),
@@ -197,7 +201,8 @@ describe('RoomSessionService', () => {
       sentAt: new Date().toISOString(),
       payload: {
         feedId: 'feed-remote-1',
-        label: 'FaceTime HD Camera'
+        label: 'FaceTime HD Camera',
+        profileImageUrl: 'https://example.com/remote.png'
       }
     }, 'local-1');
 
@@ -232,6 +237,7 @@ describe('RoomSessionService', () => {
     expect(feedsSnapshot[0]).toEqual(expect.objectContaining({
       id: service.createRemotePublishedFeedId('remote-1', 'feed-remote-1'),
       ownerId: 'remote-1',
+      ownerProfileImageUrl: 'https://example.com/remote.png',
       publishedFeedId: 'feed-remote-1',
       trackId: 'track-2',
       stream: expect.any(Object),

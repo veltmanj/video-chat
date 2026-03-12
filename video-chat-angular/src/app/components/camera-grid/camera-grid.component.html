@@ -19,8 +19,16 @@
       </video>
 
       <div class="placeholder" [class.placeholder-offline]="!feed.online" *ngIf="!feed.stream">
-        <div class="pulse" [class.pulse-offline]="!feed.online"></div>
-        <p>{{ feed.online ? 'Wachten op stream...' : 'Offline' }}</p>
+        <ng-container *ngIf="showOfflineAvatar(feed); else placeholderStatus">
+          <img
+            class="offline-avatar"
+            [src]="feed.ownerProfileImageUrl!"
+            [alt]="getOfflineAvatarAlt(feed)">
+        </ng-container>
+        <ng-template #placeholderStatus>
+          <div class="pulse" [class.pulse-offline]="!feed.online"></div>
+          <p>{{ feed.online ? 'Wachten op stream...' : 'Offline' }}</p>
+        </ng-template>
       </div>
     </div>
 

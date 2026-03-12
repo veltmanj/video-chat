@@ -143,6 +143,7 @@ export class RoomSessionService {
         id: this.createRemotePublishedFeedId(event.senderId, cameraPublishedPayload.feedId),
         ownerId: event.senderId,
         ownerName: event.senderName,
+        ownerProfileImageUrl: cameraPublishedPayload.profileImageUrl ?? null,
         publishedFeedId: cameraPublishedPayload.feedId,
         label: cameraPublishedPayload.label || `${event.senderName} camera`,
         local: false,
@@ -234,6 +235,10 @@ export class RoomSessionService {
       deviceId: 'deviceId' in event.payload && typeof event.payload.deviceId === 'string'
         ? event.payload.deviceId
         : undefined,
+      profileImageUrl: 'profileImageUrl' in event.payload
+        && (typeof event.payload.profileImageUrl === 'string' || event.payload.profileImageUrl === null)
+        ? event.payload.profileImageUrl
+        : undefined,
       label
     };
   }
@@ -296,6 +301,7 @@ export class RoomSessionService {
           ...feed,
           id: this.createRemotePublishedFeedId(ownerId, payload.feedId),
           publishedFeedId: payload.feedId,
+          ownerProfileImageUrl: payload.profileImageUrl ?? feed.ownerProfileImageUrl ?? null,
           label: payload.label || `${feed.ownerName} camera`
         };
       });

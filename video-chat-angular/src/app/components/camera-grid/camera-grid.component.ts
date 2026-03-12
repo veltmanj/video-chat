@@ -19,6 +19,14 @@ export class CameraGridComponent implements AfterViewChecked {
     return feed.local ? feed.label : `Camera van ${feed.ownerName}`;
   }
 
+  showOfflineAvatar(feed: CameraFeed): boolean {
+    return !feed.local && !feed.online && !feed.stream && !!feed.ownerProfileImageUrl;
+  }
+
+  getOfflineAvatarAlt(feed: CameraFeed): string {
+    return `${feed.ownerName} profielafbeelding`;
+  }
+
   ngAfterViewChecked(): void {
     if (!this.videoElements) {
       return;

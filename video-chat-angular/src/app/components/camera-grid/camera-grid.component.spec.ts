@@ -43,11 +43,12 @@ describe('CameraGridComponent', () => {
     expect(playSpy).toHaveBeenCalled();
   });
 
-  it('shows an offline placeholder message when a remote stream has stopped', () => {
+  it('shows the remote profile image when a remote stream has stopped', () => {
     const feed: CameraFeed = {
       id: 'remote-a-feed-1',
       ownerId: 'remote-a',
       ownerName: 'Remote A',
+      ownerProfileImageUrl: 'https://example.com/remote-a.png',
       publishedFeedId: 'feed-1',
       label: 'Remote A camera',
       local: false,
@@ -58,8 +59,11 @@ describe('CameraGridComponent', () => {
     component.feeds = [feed];
     fixture.detectChanges();
 
+    const offlineAvatar = fixture.nativeElement.querySelector('.offline-avatar') as HTMLImageElement | null;
+
     expect(fixture.nativeElement.textContent).toContain('Camera van Remote A');
-    expect(fixture.nativeElement.textContent).toContain('Offline');
+    expect(fixture.nativeElement.textContent).not.toContain('Offline');
+    expect(offlineAvatar?.getAttribute('src')).toBe('https://example.com/remote-a.png');
   });
 
   it('keeps the original camera name visible on the local tile', () => {

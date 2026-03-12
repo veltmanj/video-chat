@@ -19,6 +19,7 @@ export interface CameraFeed {
   id: string;
   ownerId: string;
   ownerName: string;
+  ownerProfileImageUrl?: string | null;
   publishedFeedId?: string;
   trackId?: string;
   deviceId?: string;
@@ -61,6 +62,7 @@ export interface CameraPublishedPayload {
   feedId: string;
   deviceId?: string;
   label: string;
+  profileImageUrl?: string | null;
 }
 
 export interface CameraRemovedPayload {

@@ -789,7 +789,8 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     return {
       feedId,
       deviceId: device.deviceId,
-      label: device.label
+      label: device.label,
+      profileImageUrl: this.auth.profileImageUrl
     };
   }
 
