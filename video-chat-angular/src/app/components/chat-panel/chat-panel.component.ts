@@ -11,11 +11,21 @@ import { ChatMessage } from '../../core/models/room.models';
   imports: [CommonModule, FormsModule]
 })
 export class ChatPanelComponent {
+  @Input() aiAgentBusy = false;
+  @Input() aiAgentEnabled = false;
+  @Input() aiAgentMention = '@pulse';
+  @Input() aiAgentName = 'Pulse Copilot';
   @Input() messages: ChatMessage[] = [];
   @Input() connected = false;
   @Output() sendMessage = new EventEmitter<string>();
 
   draft = '';
+
+  get composerPlaceholder(): string {
+    return this.aiAgentEnabled
+      ? `Typ een bericht of mention ${this.aiAgentMention}`
+      : 'Typ een bericht voor de room';
+  }
 
   submitMessage(): void {
     const text = this.draft.trim();

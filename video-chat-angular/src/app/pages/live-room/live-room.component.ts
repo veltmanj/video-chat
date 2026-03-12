@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, DestroyRef, NgZone, OnDestroy, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { CameraGridComponent } from '../../components/camera-grid/camera-grid.component';
 import { ChatPanelComponent } from '../../components/chat-panel/chat-panel.component';
@@ -16,6 +17,7 @@ import {
   WebrtcSignalPayload
 } from '../../core/models/room.models';
 import { AuthService } from '../../core/services/auth.service';
+import { AiAgentContextMessage, AiAgentService } from '../../core/services/ai-agent.service';
 import { MediaDeviceService } from '../../core/services/media-device.service';
 import { RoomSessionService } from '../../core/services/room-session.service';
 import { RsocketRoomService } from '../../core/services/rsocket-room.service';
@@ -36,6 +38,7 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
   private static readonly DEFAULT_DISPLAY_NAME_PREFIX = 'PulseRoom';
   private static readonly ACCESS_TOKEN_STORAGE_KEY = 'pulse-room:broker-access-token';
   private static readonly RENEGOTIATION_RECOVERY_DELAY_MS = 1500;
+  private static readonly AI_AGENT_SENDER_ID = 'ai-agent';
 
   roomId = 'main-stage';
   displayName = '';
@@ -52,8 +55,10 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
   uiInfo = '';
   isConnecting = false;
   isAddingCamera = false;
+  aiAgentBusy = false;
 
   private currentIdentity: ClientIdentity | null = null;
+  private pendingAiReplies = 0;
   private readonly destroyRef = inject(DestroyRef);
   private readonly ngZone = inject(NgZone);
   private readonly changeDetectorRef = inject(ChangeDetectorRef);
@@ -68,6 +73,7 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
 
   constructor(
     private auth: AuthService,
+    private aiAgentService: AiAgentService,
     private mediaDeviceService: MediaDeviceService,
     private roomSessionService: RoomSessionService,
     private rsocketRoomService: RsocketRoomService,
@@ -82,6 +88,18 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
    */
   get connected(): boolean {
     return this.connectionState === 'CONNECTED';
+  }
+
+  get aiAgentEnabled(): boolean {
+    return this.aiAgentService.enabled;
+  }
+
+  get aiAgentName(): string {
+    return this.aiAgentService.agentName;
+  }
+
+  get aiAgentMention(): string {
+    return this.aiAgentService.mentionTrigger;
   }
 
   get customBrokerUrlsLocked(): boolean {
@@ -367,7 +385,12 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     }
 
     this.rsocketRoomService.publish('CHAT_MESSAGE', { text: trimmedText });
-    this.roomSessionService.appendMessage(this.createLocalChatMessage(trimmedText));
+    const localMessage = this.createLocalChatMessage(trimmedText);
+    this.roomSessionService.appendMessage(localMessage);
+
+    if (this.aiAgentService.shouldReplyTo(trimmedText)) {
+      void this.requestAiReply(localMessage);
+    }
   }
 
   /**
@@ -805,7 +828,70 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
       senderName: this.currentIdentity!.displayName,
       text,
       sentAt: new Date().toISOString(),
-      local: true
+      local: true,
+      role: 'participant'
+    };
+  }
+
+  private async requestAiReply(triggerMessage: ChatMessage): Promise<void> {
+    if (!this.currentIdentity || !this.aiAgentService.enabled) {
+      return;
+    }
+
+    this.pendingAiReplies += 1;
+    this.aiAgentBusy = true;
+
+    try {
+      const reply = await firstValueFrom(this.aiAgentService.requestReply({
+        participantName: this.currentIdentity.displayName,
+        prompt: this.aiAgentService.stripMention(triggerMessage.text)
+          || 'The user mentioned you without a specific question. Ask how you can help.',
+        recentMessages: this.buildAiContextMessages(triggerMessage),
+        roomId: this.roomId
+      }));
+
+      const replyText = reply.reply.trim();
+      if (!replyText) {
+        throw new Error('AI agent returned an empty reply.');
+      }
+
+      this.rsocketRoomService.publish(
+        'AI_MESSAGE',
+        { text: replyText },
+        {
+          senderId: LiveRoomComponent.AI_AGENT_SENDER_ID,
+          senderName: reply.agentName?.trim() || this.aiAgentService.agentName
+        }
+      );
+    } catch (error) {
+      const message = this.extractErrorMessage(error);
+      this.setError(`AI agent unavailable: ${message}`);
+    } finally {
+      this.pendingAiReplies = Math.max(0, this.pendingAiReplies - 1);
+      this.aiAgentBusy = this.pendingAiReplies > 0;
+    }
+  }
+
+  private buildAiContextMessages(triggerMessage: ChatMessage): AiAgentContextMessage[] {
+    return [...this.messages, triggerMessage]
+      .filter((message, index, messages) => messages.findIndex((candidate) => candidate.id === message.id) === index)
+      .slice(-8)
+      .map((message) => ({
+        senderName: message.senderName,
+        sentAt: message.sentAt,
+        text: message.text
+      }));
+  }
+
+  private createAiChatMessage(text: string): ChatMessage {
+    return {
+      id: this.roomSessionService.createId('msg'),
+      roomId: this.roomId,
+      senderId: LiveRoomComponent.AI_AGENT_SENDER_ID,
+      senderName: this.aiAgentService.agentName,
+      text,
+      sentAt: new Date().toISOString(),
+      role: 'assistant'
     };
   }
 }

@@ -128,6 +128,25 @@ lsof -nP -iTCP:4200 -sTCP:LISTEN
 curl -sI http://localhost:4200
 ```
 
+Optional shared AI copilot service through the backoffice:
+
+```bash
+cd "${REPO_ROOT}/video-chat-backoffice"
+BACKOFFICE_AI_ENABLED=true BACKOFFICE_AI_API_KEY=your_key_here mvn spring-boot:run
+```
+
+The Angular dev server now proxies `/social-api/*` to `http://localhost:7901`, so the frontend can call the shared backoffice assistant endpoint with the same authenticated flow as the social features.
+
+Optional browser-local fallback AI proxy:
+
+```bash
+cd "${REPO_ROOT}/video-chat-angular"
+export OPENAI_API_KEY=your_key_here
+npm run start:agent
+```
+
+The Angular dev server proxies `/api/*` to `http://localhost:8787`, so the browser never needs a direct OpenAI key even in fallback mode.
+
 Watch mode build:
 
 ```bash

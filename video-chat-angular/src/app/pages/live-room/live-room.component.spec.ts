@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, type MockedObject, vi } from 'vitest';
 import { CameraFeed, ChatMessage, ConnectionState, RoomEvent } from '../../core/models/room.models';
+import { AiAgentService } from '../../core/services/ai-agent.service';
 import { AuthService } from '../../core/services/auth.service';
 import { MediaDeviceService } from '../../core/services/media-device.service';
 import { RoomSessionService } from '../../core/services/room-session.service';
@@ -28,6 +29,7 @@ describe('LiveRoomComponent', () => {
   let roomEventsSubject: Subject<RoomEvent>;
 
   let mediaDeviceService: MockedObject<MediaDeviceService>;
+  let aiAgentService: MockedObject<AiAgentService>;
   let roomSessionService: MockedObject<RoomSessionService>;
   let rsocketRoomService: MockedObject<RsocketRoomService>;
   let webrtcMeshService: MockedObject<WebrtcMeshService>;
@@ -62,6 +64,15 @@ describe('LiveRoomComponent', () => {
       startCamera: vi.fn(),
       stopCamera: vi.fn()
     } as unknown as MockedObject<MediaDeviceService>;
+
+    aiAgentService = {
+      enabled: true,
+      agentName: 'Pulse Copilot',
+      mentionTrigger: '@pulse',
+      shouldReplyTo: vi.fn(),
+      stripMention: vi.fn(),
+      requestReply: vi.fn()
+    } as unknown as MockedObject<AiAgentService>;
 
     roomSessionService = {
       createId: vi.fn(),
@@ -107,6 +118,9 @@ describe('LiveRoomComponent', () => {
     };
 
     mediaDeviceService.listVideoInputs.mockResolvedValue([{ deviceId: 'cam-1', label: 'Camera 1' }]);
+    aiAgentService.shouldReplyTo.mockImplementation((text: string) => text.trim().toLowerCase().startsWith('@pulse'));
+    aiAgentService.stripMention.mockImplementation((text: string) => text.trim().replace(/^@pulse\s*/i, '').trim());
+    aiAgentService.requestReply.mockReturnValue(new BehaviorSubject({ reply: 'AI summary', model: 'gpt-5-mini' }).asObservable());
     mediaDeviceService.startCamera.mockResolvedValue({ id: 'stream-1', getTracks: () => [] } as any);
     rsocketRoomService.connect.mockResolvedValue(undefined);
     rsocketRoomService.publishWithAck.mockResolvedValue(true);
@@ -119,6 +133,7 @@ describe('LiveRoomComponent', () => {
       imports: [LiveRoomComponent],
       providers: [
         { provide: AuthService, useValue: authService },
+        { provide: AiAgentService, useValue: aiAgentService },
         { provide: MediaDeviceService, useValue: mediaDeviceService },
         { provide: RoomSessionService, useValue: roomSessionService },
         { provide: RsocketRoomService, useValue: rsocketRoomService },
@@ -394,6 +409,29 @@ describe('LiveRoomComponent', () => {
       text: 'Hallo team',
       local: true
     }));
+  });
+
+  it('requests an AI reply when the message mentions the agent', async () => {
+    component.accessToken = 'broker-token';
+    await component.connectRoom();
+    stateSubject.next('CONNECTED');
+
+    component.sendMessage('@pulse vat deze room samen');
+    await fixture.whenStable();
+
+    expect(aiAgentService.requestReply).toHaveBeenCalledWith(expect.objectContaining({
+      participantName: expect.any(String),
+      prompt: 'vat deze room samen',
+      roomId: 'main-stage'
+    }));
+    expect(rsocketRoomService.publish).toHaveBeenCalledWith(
+      'AI_MESSAGE',
+      { text: 'AI summary' },
+      {
+        senderId: 'ai-agent',
+        senderName: 'Pulse Copilot'
+      }
+    );
   });
 
   it('blocks chat send while disconnected', () => {

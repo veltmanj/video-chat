@@ -85,7 +85,8 @@
               "buildTarget": "video-chat-angular:build:production"
             },
             "development": {
-              "buildTarget": "video-chat-angular:build:development"
+              "buildTarget": "video-chat-angular:build:development",
+              "proxyConfig": "proxy.conf.json"
             }
           },
           "defaultConfiguration": "development"

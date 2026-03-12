@@ -1,6 +1,14 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
-import { CameraFeed, CameraPublishedPayload, CameraRemovedPayload, ChatMessage, ChatMessagePayload, RoomEvent } from '../models/room.models';
+import {
+  AiMessagePayload,
+  CameraFeed,
+  CameraPublishedPayload,
+  CameraRemovedPayload,
+  ChatMessage,
+  ChatMessagePayload,
+  RoomEvent
+} from '../models/room.models';
 
 @Injectable({
   providedIn: 'root'
@@ -133,6 +141,21 @@ export class RoomSessionService {
       return;
     }
 
+    const aiPayload = this.getAiMessagePayload(event);
+    if (aiPayload) {
+      this.appendMessage({
+        id: this.createId('msg'),
+        roomId: event.roomId,
+        senderId: event.senderId,
+        senderName: event.senderName,
+        text: aiPayload.text,
+        sentAt: event.sentAt,
+        local: false,
+        role: 'assistant'
+      });
+      return;
+    }
+
     const cameraPublishedPayload = this.getCameraPublishedPayload(event);
     if (cameraPublishedPayload && event.senderId !== localClientId) {
       if (this.attachPublishedFeedToExistingRemoteTrack(event.senderId, cameraPublishedPayload)) {
@@ -204,6 +227,20 @@ export class RoomSessionService {
   private getChatMessagePayload(event: RoomEvent): ChatMessagePayload | null {
     if (
       event.type !== 'CHAT_MESSAGE'
+      || !event.payload
+      || typeof event.payload !== 'object'
+      || !('text' in event.payload)
+      || typeof event.payload.text !== 'string'
+    ) {
+      return null;
+    }
+
+    return { text: event.payload.text };
+  }
+
+  private getAiMessagePayload(event: RoomEvent): AiMessagePayload | null {
+    if (
+      event.type !== 'AI_MESSAGE'
       || !event.payload
       || typeof event.payload !== 'object'
       || !('text' in event.payload)

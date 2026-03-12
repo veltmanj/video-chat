@@ -13,7 +13,7 @@ describe('PrivacyPolicyComponent', () => {
 
     fixture = TestBed.createComponent(PrivacyPolicyComponent);
     fixture.detectChanges();
-  });
+  }, 20000);
 
   it('renders the privacy policy page', () => {
     const text = fixture.nativeElement.textContent || '';

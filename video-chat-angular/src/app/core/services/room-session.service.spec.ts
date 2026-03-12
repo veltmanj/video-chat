@@ -54,6 +54,31 @@ describe('RoomSessionService', () => {
     expect(latestText).toBe('hello');
   });
 
+  it('consumes AI room event into assistant message stream', () => {
+    const event: RoomEvent = {
+      type: 'AI_MESSAGE',
+      roomId: 'room-1',
+      senderId: 'ai-agent',
+      senderName: 'Pulse Copilot',
+      sentAt: new Date().toISOString(),
+      payload: { text: 'Shared answer' }
+    };
+
+    service.consumeRoomEvent(event, 'local-1');
+
+    let latestMessage: any = null;
+    service.messages$.subscribe((messages) => {
+      latestMessage = messages[messages.length - 1] ?? null;
+    }).unsubscribe();
+
+    expect(latestMessage).toEqual(expect.objectContaining({
+      senderId: 'ai-agent',
+      senderName: 'Pulse Copilot',
+      text: 'Shared answer',
+      role: 'assistant'
+    }));
+  });
+
   it('keeps a remote tile and marks it offline when CAMERA_REMOVED arrives', () => {
     const publishedEvent: RoomEvent = {
       type: 'CAMERA_PUBLISHED',

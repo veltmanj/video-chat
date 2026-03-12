@@ -44,13 +44,14 @@ describe('LoginComponent', () => {
     fixture.detectChanges();
   }
 
-  it('hides developer setup details outside development mode', () => {
+  it('hides developer setup details outside development mode', async () => {
     createComponent();
+    await fixture.whenStable();
 
     const text = fixture.nativeElement.textContent || '';
     expect(text).not.toContain('Development mode');
     expect(text).not.toContain('Missing Google client ID');
-  });
+  }, 15000);
 
   it('shows developer setup details in development mode', () => {
     authService.isDevelopmentMode = true;

@@ -40,6 +40,10 @@
 
     <app-chat-panel
       class="chat-zone"
+      [aiAgentBusy]="aiAgentBusy"
+      [aiAgentEnabled]="aiAgentEnabled"
+      [aiAgentMention]="aiAgentMention"
+      [aiAgentName]="aiAgentName"
       [messages]="messages"
       [connected]="connected"
       (sendMessage)="sendMessage($event)">

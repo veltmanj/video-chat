@@ -38,12 +38,14 @@ export interface ChatMessage {
   text: string;
   sentAt: string;
   local?: boolean;
+  role?: 'participant' | 'assistant' | 'system';
 }
 
 export type RoomEventType =
   | 'ROOM_JOINED'
   | 'ROOM_LEFT'
   | 'CHAT_MESSAGE'
+  | 'AI_MESSAGE'
   | 'CAMERA_PUBLISHED'
   | 'CAMERA_REMOVED'
   | 'CAMERA_STATUS'
@@ -55,6 +57,10 @@ export interface RoomJoinedPayload {
 }
 
 export interface ChatMessagePayload {
+  text: string;
+}
+
+export interface AiMessagePayload {
   text: string;
 }
 
@@ -82,6 +88,7 @@ export interface RoomEventPayloadMap {
   ROOM_JOINED: RoomJoinedPayload;
   ROOM_LEFT: Record<string, never>;
   CHAT_MESSAGE: ChatMessagePayload;
+  AI_MESSAGE: AiMessagePayload;
   CAMERA_PUBLISHED: CameraPublishedPayload;
   CAMERA_REMOVED: CameraRemovedPayload;
   CAMERA_STATUS: CameraStatusPayload;

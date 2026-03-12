@@ -10,7 +10,7 @@
 header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   padding: 0.9rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -19,13 +19,37 @@ header h3 {
   margin: 0;
 }
 
+header p {
+  margin: 0.25rem 0 0;
+}
+
 header span {
   font-size: 0.75rem;
   color: #fca5a5;
 }
 
+.agent-hint {
+  color: rgba(191, 219, 254, 0.92);
+  font-size: 0.78rem;
+}
+
+.status-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
 .state-online {
   color: #86efac;
+}
+
+.state-ai {
+  color: #c4b5fd;
+}
+
+.state-ai-busy {
+  color: #fcd34d;
 }
 
 .messages {
@@ -43,6 +67,15 @@ header span {
 
 .message-local {
   background: rgba(34, 197, 94, 0.15);
+}
+
+.message-assistant {
+  background: rgba(59, 130, 246, 0.14);
+  border: 1px solid rgba(125, 211, 252, 0.2);
+}
+
+.message-system {
+  background: rgba(245, 158, 11, 0.14);
 }
 
 .meta {

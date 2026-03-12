@@ -1,0 +1,17 @@
+{
+  "/api": {
+    "target": "http://localhost:8787",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "info"
+  },
+  "/social-api": {
+    "target": "http://localhost:7901",
+    "secure": false,
+    "changeOrigin": true,
+    "pathRewrite": {
+      "^/social-api": ""
+    },
+    "logLevel": "info"
+  }
+}

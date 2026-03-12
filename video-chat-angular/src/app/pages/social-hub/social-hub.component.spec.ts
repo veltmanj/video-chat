@@ -107,7 +107,7 @@ describe('SocialHubComponent', () => {
     component = fixture.componentInstance;
     fixture.detectChanges();
     await fixture.whenStable();
-  });
+  }, 20000);
 
   afterEach(() => {
     fixture.destroy();

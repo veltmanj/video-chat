@@ -1,12 +1,9 @@
 import { Injectable, NgZone } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
+import { resolveAppMode, resolveGoogleClientId } from '../config/runtime-config';
 
 declare global {
   interface Window {
-    __VIDEOCHAT_CONFIG__?: {
-      googleClientId?: string;
-      appMode?: string;
-    };
     google?: GoogleNamespace;
   }
 }
@@ -50,22 +47,6 @@ type IdentityClaims = Record<string, unknown> | null;
 const GOOGLE_ID_TOKEN_STORAGE_KEY = 'pulse-room:google-id-token';
 const GOOGLE_IDENTITY_SCRIPT_ID = 'google-identity-services';
 const GOOGLE_IDENTITY_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
-
-function resolveGoogleClientId(): string {
-  if (typeof window === 'undefined') {
-    return '';
-  }
-
-  return window.__VIDEOCHAT_CONFIG__?.googleClientId?.trim() ?? '';
-}
-
-function resolveAppMode(): string {
-  if (typeof window === 'undefined') {
-    return 'production';
-  }
-
-  return window.__VIDEOCHAT_CONFIG__?.appMode?.trim().toLowerCase() || 'production';
-}
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {

@@ -1,11 +1,24 @@
 <section class="chat-panel">
   <header>
-    <h3>Live Chat</h3>
-    <span [class.state-online]="connected">{{ connected ? 'Online' : 'Offline' }}</span>
+    <div>
+      <h3>Live Chat</h3>
+      <p *ngIf="aiAgentEnabled" class="agent-hint">Mention {{ aiAgentMention }} to ask {{ aiAgentName }}.</p>
+    </div>
+    <div class="status-stack">
+      <span [class.state-online]="connected">{{ connected ? 'Online' : 'Offline' }}</span>
+      <span *ngIf="aiAgentEnabled" class="state-ai" [class.state-ai-busy]="aiAgentBusy">
+        {{ aiAgentBusy ? aiAgentName + ' typing' : aiAgentName + ' ready' }}
+      </span>
+    </div>
   </header>
 
   <div class="messages">
-    <article class="message" *ngFor="let message of messages" [class.message-local]="message.local">
+    <article
+      class="message"
+      *ngFor="let message of messages"
+      [class.message-assistant]="message.role === 'assistant'"
+      [class.message-local]="message.local"
+      [class.message-system]="message.role === 'system'">
       <p class="meta">{{ message.senderName }} • {{ message.sentAt | date:'HH:mm:ss' }}</p>
       <p class="text">{{ message.text }}</p>
     </article>
@@ -16,7 +29,7 @@
       type="text"
       name="message"
       [(ngModel)]="draft"
-      placeholder="Typ een bericht voor de room"
+      [placeholder]="composerPlaceholder"
       [disabled]="!connected"
       maxlength="220">
     <button type="submit" [disabled]="!connected || !draft.trim()">Send</button>

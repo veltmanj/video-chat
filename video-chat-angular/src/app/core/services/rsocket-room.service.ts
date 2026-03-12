@@ -86,6 +86,11 @@ interface RoomEventEnvelope {
   event?: RoomEvent;
 }
 
+interface EventSenderOverride {
+  senderId: string;
+  senderName: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -210,8 +215,12 @@ export class RsocketRoomService {
   /**
    * Publishes an event without waiting for broker acknowledgement.
    */
-  publish<TType extends RoomEventType>(type: TType, payload: RoomEventPayloadMap[TType]): void {
-    const event = this.buildEvent(type, payload);
+  publish<TType extends RoomEventType>(
+    type: TType,
+    payload: RoomEventPayloadMap[TType],
+    senderOverride?: EventSenderOverride
+  ): void {
+    const event = this.buildEvent(type, payload, senderOverride);
     const socket = this.brokerState?.socket;
     if (!event || !socket?.fireAndForget) {
       return;
@@ -224,8 +233,12 @@ export class RsocketRoomService {
   /**
    * Publishes an event and resolves whether the broker acknowledged it.
    */
-  publishWithAck<TType extends RoomEventType>(type: TType, payload: RoomEventPayloadMap[TType]): Promise<boolean> {
-    const event = this.buildEvent(type, payload);
+  publishWithAck<TType extends RoomEventType>(
+    type: TType,
+    payload: RoomEventPayloadMap[TType],
+    senderOverride?: EventSenderOverride
+  ): Promise<boolean> {
+    const event = this.buildEvent(type, payload, senderOverride);
     const socket = this.brokerState?.socket;
     if (!event || !socket?.requestResponse) {
       return Promise.resolve(false);
@@ -756,17 +769,21 @@ export class RsocketRoomService {
 
   private buildEvent<TType extends RoomEventType>(
     type: TType,
-    payload: RoomEventPayloadMap[TType]
+    payload: RoomEventPayloadMap[TType],
+    senderOverride?: EventSenderOverride
   ): RoomEvent<TType> | null {
     if (!this.identity || !this.currentRoomId) {
       return null;
     }
 
+    const senderId = senderOverride?.senderId?.trim() || this.identity.clientId;
+    const senderName = senderOverride?.senderName?.trim() || this.identity.displayName;
+
     return {
       type,
       roomId: this.currentRoomId,
-      senderId: this.identity.clientId,
-      senderName: this.identity.displayName,
+      senderId,
+      senderName,
       sentAt: new Date().toISOString(),
       payload
     };
