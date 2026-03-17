@@ -90,7 +90,7 @@ public class JwtValidatorService {
         List<Provider> enabledProviders = properties.getProviders().stream()
             .filter(Provider::isEnabled)
             .filter(provider -> StringUtils.hasText(provider.getName()))
-            .filter(provider -> StringUtils.hasText(provider.getVaultPath()))
+            .filter(this::hasJwkSourceConfigured)
             .toList();
 
         List<Provider> genericProviders = enabledProviders.stream()
@@ -146,6 +146,12 @@ public class JwtValidatorService {
                 provider.getName()
             ));
         }
+    }
+
+    private boolean hasJwkSourceConfigured(Provider provider) {
+        return StringUtils.hasText(provider.getJwkSetJson())
+            || StringUtils.hasText(provider.getJwkSetUri())
+            || StringUtils.hasText(provider.getVaultPath());
     }
 
     private List<RSAKey> selectCandidateKeys(JWKSet jwkSet, String keyId) {

@@ -118,6 +118,22 @@ class JwtValidatorServiceTest {
         assertThat(validatorService.validate("not-a-jwt")).isFalse();
     }
 
+    @Test
+    void shouldAcceptProviderConfiguredWithDirectJwkSetUriWithoutVaultPath() throws Exception {
+        Provider directProvider = provider(
+            "google-direct",
+            List.of("https://accounts.google.com", "accounts.google.com"),
+            List.of("google-web-client-id"),
+            ""
+        );
+        directProvider.setJwkSetUri("https://www.googleapis.com/oauth2/v3/certs");
+        properties.setProviders(List.of(directProvider));
+        when(vaultJwkSetService.load(directProvider))
+            .thenReturn(new JWKSet(rsaKey.toPublicJWK()));
+
+        assertThat(validatorService.validate(validToken().serialize())).isTrue();
+    }
+
     private Provider provider(String name, List<String> issuers, List<String> audiences, String vaultPath) {
         Provider provider = new Provider();
         provider.setName(name);

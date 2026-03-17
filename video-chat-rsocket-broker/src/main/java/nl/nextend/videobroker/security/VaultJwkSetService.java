@@ -41,6 +41,31 @@ public class VaultJwkSetService {
     }
 
     private JWKSet fetch(Provider provider) {
+        if (StringUtils.hasText(provider.getJwkSetJson())) {
+            return parseJwkSet(
+                provider.getJwkSetJson(),
+                "inline jwkSetJson for provider " + provider.getName()
+            );
+        }
+
+        if (StringUtils.hasText(provider.getJwkSetUri())) {
+            String jwksJson = webClient.get()
+                .uri(provider.getJwkSetUri())
+                .header(HttpHeaders.ACCEPT, "application/json")
+                .retrieve()
+                .bodyToMono(String.class)
+                .block(requestTimeout());
+
+            if (!StringUtils.hasText(jwksJson)) {
+                throw new IllegalStateException("JWKS URL returned no body for provider " + provider.getName());
+            }
+
+            return parseJwkSet(
+                jwksJson,
+                "JWKS URL " + provider.getJwkSetUri() + " for provider " + provider.getName()
+            );
+        }
+
         Map<?, ?> response = webClient.get()
             .uri(buildSecretUri(provider))
             .header(HttpHeaders.ACCEPT, "application/json")
@@ -60,13 +85,17 @@ public class VaultJwkSetService {
             );
         }
 
+        return parseJwkSet(
+            jwksJson,
+            "Vault secret " + provider.getVaultPath() + " for provider " + provider.getName()
+        );
+    }
+
+    private JWKSet parseJwkSet(String jwksJson, String sourceDescription) {
         try {
             return JWKSet.parse(jwksJson);
         } catch (Exception error) {
-            throw new IllegalStateException(
-                "Vault secret " + provider.getVaultPath() + " does not contain a valid JWKS document",
-                error
-            );
+            throw new IllegalStateException(sourceDescription + " does not contain a valid JWKS document", error);
         }
     }
 
@@ -87,7 +116,14 @@ public class VaultJwkSetService {
     }
 
     private String cacheKey(Provider provider) {
-        return provider.getName() + "|" + provider.getVaultPath() + "|" + provider.getVaultField();
+        return String.join(
+            "|",
+            provider.getName(),
+            provider.getJwkSetUri(),
+            provider.getJwkSetJson(),
+            provider.getVaultPath(),
+            provider.getVaultField()
+        );
     }
 
     @SuppressWarnings("unchecked")

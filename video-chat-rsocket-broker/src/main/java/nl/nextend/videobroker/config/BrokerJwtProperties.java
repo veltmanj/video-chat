@@ -99,6 +99,8 @@ public class BrokerJwtProperties {
         private String name = "";
         private List<String> issuers = new ArrayList<>();
         private List<String> audiences = new ArrayList<>();
+        private String jwkSetUri = "";
+        private String jwkSetJson = "";
         private String vaultPath = "";
         private String vaultField = "jwks_json";
 
@@ -132,6 +134,22 @@ public class BrokerJwtProperties {
 
         public void setAudiences(List<String> audiences) {
             this.audiences = normalizeValues(audiences);
+        }
+
+        public String getJwkSetUri() {
+            return jwkSetUri;
+        }
+
+        public void setJwkSetUri(String jwkSetUri) {
+            this.jwkSetUri = jwkSetUri == null ? "" : jwkSetUri.trim();
+        }
+
+        public String getJwkSetJson() {
+            return jwkSetJson;
+        }
+
+        public void setJwkSetJson(String jwkSetJson) {
+            this.jwkSetJson = jwkSetJson == null ? "" : jwkSetJson.trim();
         }
 
         public String getVaultPath() {
