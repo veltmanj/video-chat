@@ -7,7 +7,7 @@ The backoffice service receives room events from the broker over RSocket and kee
 ## 2. Supported stack
 
 - Spring Boot `4.0.3`
-- Java `17+`
+- Java `21+`
 - Maven `3.6.3+`
 
 ## 3. Prerequisites
@@ -23,7 +23,7 @@ mvn -version
 
 Expected minimums:
 
-- Java 17 or newer
+- Java 21 or newer
 - Maven 3.6.3 or newer
 
 ## 4. Install and build
