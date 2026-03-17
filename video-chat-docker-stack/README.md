@@ -2,6 +2,8 @@
 
 Docker Compose stack for the Angular frontend, RSocket broker, Spring Boot backoffice, HashiCorp Vault, Prometheus, Loki, Grafana, and Caddy reverse proxy with locally trusted HTTPS.
 
+For Kubernetes deployment, configuration, and automation scripts, see [docs/INSTALL-CONFIGURE-MAINTAIN-KUBERNETES.md](./docs/INSTALL-CONFIGURE-MAINTAIN-KUBERNETES.md).
+
 ## Included services
 
 - Angular frontend

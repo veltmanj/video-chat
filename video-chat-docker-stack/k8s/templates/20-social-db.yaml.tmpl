@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: social-db
+  namespace: ${K8S_NAMESPACE}
+  labels:
+    app.kubernetes.io/name: social-db
+spec:
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app.kubernetes.io/name: social-db
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: social-db
+  namespace: ${K8S_NAMESPACE}
+spec:
+  serviceName: social-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: social-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: social-db
+        app: social-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: "${SOCIAL_DB_NAME}"
+            - name: POSTGRES_USER
+              value: "${SOCIAL_DB_USER}"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: SOCIAL_DB_PASSWORD
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: ${K8S_SOCIAL_DB_STORAGE_CLASS}
+        resources:
+          requests:
+            storage: ${K8S_SOCIAL_DB_STORAGE_SIZE}
+

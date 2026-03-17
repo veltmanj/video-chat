@@ -1,0 +1,75 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: broker
+  namespace: ${K8S_NAMESPACE}
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: ${K8S_INGRESS_CLASS_NAME}
+  tls:
+    - hosts:
+        - ${K8S_HOST}
+      secretName: ${K8S_TLS_SECRET_NAME}
+  rules:
+    - host: ${K8S_HOST}
+      http:
+        paths:
+          - path: /rsocket
+            pathType: Prefix
+            backend:
+              service:
+                name: broker
+                port:
+                  number: 9898
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: social-api
+  namespace: ${K8S_NAMESPACE}
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: ${K8S_INGRESS_CLASS_NAME}
+  tls:
+    - hosts:
+        - ${K8S_HOST}
+      secretName: ${K8S_TLS_SECRET_NAME}
+  rules:
+    - host: ${K8S_HOST}
+      http:
+        paths:
+          - path: /social-api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: backoffice
+                port:
+                  number: 7901
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend
+  namespace: ${K8S_NAMESPACE}
+spec:
+  ingressClassName: ${K8S_INGRESS_CLASS_NAME}
+  tls:
+    - hosts:
+        - ${K8S_HOST}
+      secretName: ${K8S_TLS_SECRET_NAME}
+  rules:
+    - host: ${K8S_HOST}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+

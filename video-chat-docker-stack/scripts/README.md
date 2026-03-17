@@ -3,6 +3,7 @@
 The `scripts/` directory now keeps the user-facing entrypoints at the top level and groups the real implementations by concern underneath:
 
 - `stack/`: start, stop, validate, cleanup, and logs
+- `k8s/`: bootstrap, teardown, render, validate, apply, delete, TLS, image build, Docker Desktop exposure, and database operations for Kubernetes
 - `monitoring/`: health checks and monitoring smoke tests
 - `social-db/`: backup, restore, reload, and dev seeding
 - `setup/`: local trust and OAuth setup helpers
