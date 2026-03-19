@@ -40,6 +40,8 @@ spec:
             - configMapRef:
                 name: app-config
           env:
+            - name: SERVER_HTTP2_ENABLED
+              value: "false"
             - name: BROKER_BACKOFFICE_ENDPOINT
               value: ws://backoffice:7901/rsocket
             - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE

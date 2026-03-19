@@ -291,6 +291,13 @@ ensure_ingress_controller() {
   kubectl apply -f "${DEFAULT_INGRESS_NGINX_MANIFEST_URL}" >/dev/null
   kubectl rollout status deployment/ingress-nginx-controller --namespace ingress-nginx --timeout=300s
   kubectl annotate namespace ingress-nginx videochat.nextend/installed-by-bootstrap=true --overwrite >/dev/null
+
+  # Disable HTTP/2 on the ingress frontend so Chrome can use HTTP/1.1 WebSocket upgrades.
+  kubectl patch configmap ingress-nginx-controller --namespace ingress-nginx \
+    --type merge -p '{"data":{"use-http2":"false"}}' >/dev/null
+  kubectl rollout restart deployment/ingress-nginx-controller --namespace ingress-nginx >/dev/null
+  kubectl rollout status deployment/ingress-nginx-controller --namespace ingress-nginx --timeout=300s
+
   INGRESS_INSTALLED_BY_BOOTSTRAP=true
 }
 
