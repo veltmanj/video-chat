@@ -1,7 +1,7 @@
 package nl.nextend.videobroker;
 
-import nl.nextend.videobroker.config.BackofficeRoutingProperties;
-import nl.nextend.videobroker.config.BrokerJwtProperties;
+import java.time.Clock;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,7 +12,8 @@ import org.springframework.boot.web.server.context.WebServerInitializedEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 
-import java.time.Clock;
+import nl.nextend.videobroker.config.BackofficeRoutingProperties;
+import nl.nextend.videobroker.config.BrokerJwtProperties;
 
 @SpringBootApplication(proxyBeanMethods = false)
 @EnableConfigurationProperties({BackofficeRoutingProperties.class, BrokerJwtProperties.class})
@@ -44,12 +45,13 @@ public class VideoChatBrokerApplication {
      * without opening the code or config.
      */
     ApplicationListener<WebServerInitializedEvent> logStartupEndpoints(
-        @Value("${spring.rsocket.server.mapping-path:/rsocket}") String mappingPath
+        @Value("${spring.rsocket.server.mapping-path:/rsocket}") String mappingPath,
+        @Value("${server.http2.enabled:false}") boolean http2Enabled
     ) {
         return event -> {
             int serverPort = event.getWebServer().getPort();
             String normalizedPath = mappingPath.startsWith("/") ? mappingPath : "/" + mappingPath;
-            log.info("RSocket broker ready at ws://localhost:{}{}", serverPort, normalizedPath);
+            log.info("RSocket broker ready at ws://localhost:{}{} (HTTP/2 {})", serverPort, normalizedPath, http2Enabled ? "enabled" : "disabled");
             log.info("Health endpoint: http://localhost:{}/actuator/health", serverPort);
         };
     }

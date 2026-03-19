@@ -1,6 +1,8 @@
 server:
   address: ${SERVER_ADDRESS:0.0.0.0}
   port: ${SERVER_PORT:9898}
+  http2:
+    enabled: ${SERVER_HTTP2_ENABLED:true}
 
 spring:
   application:
@@ -9,6 +11,8 @@ spring:
     server:
       transport: websocket
       mapping-path: ${BROKER_RSOCKET_MAPPING_PATH:/rsocket}
+      spec:
+        protocols: rsocket
 
 broker:
   jwt:
