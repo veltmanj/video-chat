@@ -336,7 +336,61 @@ kubectl -n "${K8S_NAMESPACE}" logs deploy/broker
 kubectl -n "${K8S_NAMESPACE}" logs deploy/backoffice
 ```
 
-## 9. Notes and tradeoffs
+## 9. Troubleshooting
+
+### WebSocket works in Safari but fails in Chrome
+
+Chrome strictly enforces RFC 6455 for WebSocket connections, while Safari is more lenient. If `wss://<K8S_HOST>/rsocket` works in Safari but silently fails in Chrome, there are three things to check:
+
+#### 1. TLS certificate not trusted
+
+Chrome rejects WebSocket connections to servers with untrusted certificates, even when the page itself loaded without warnings.
+
+The self-signed TLS script (`scripts/k8s/create-self-signed-tls.sh`) generates a persistent local CA and signs server certificates with it. On macOS it also trusts the CA in the login keychain. If you regenerated certificates or are on a fresh machine, run:
+
+```bash
+./scripts/k8s/create-self-signed-tls.sh
+```
+
+Verify the CA is trusted:
+
+```bash
+security find-certificate -c "videochat-local-ca" ~/Library/Keychains/login.keychain-db
+```
+
+#### 2. HTTP/2 interfering with WebSocket upgrades
+
+When nginx-ingress advertises HTTP/2, Chrome uses the HTTP/2 Extended CONNECT mechanism for WebSocket. nginx-ingress does not support proxying Extended CONNECT to upstream HTTP/1.1 WebSocket servers.
+
+The bootstrap script disables HTTP/2 in the nginx-ingress ConfigMap automatically. If you installed ingress-nginx manually, apply the setting yourself:
+
+```bash
+kubectl -n ingress-nginx patch configmap ingress-nginx-controller \
+  --type merge -p '{"data":{"use-http2":"false"}}'
+kubectl -n ingress-nginx rollout restart deployment ingress-nginx-controller
+```
+
+On the broker side, the Netty HTTP/2 cleartext upgrade handler can also intercept WebSocket upgrade requests. The broker deployment template sets `SERVER_HTTP2_ENABLED=false` to prevent this.
+
+#### 3. WebSocket subprotocol not confirmed (most common cause)
+
+The Angular client opens the WebSocket with `Sec-WebSocket-Protocol: rsocket`. Per RFC 6455 §4.2.2, when a client requests a subprotocol the server must confirm it in the response. Chrome fails the connection if the server does not confirm; Safari ignores the omission.
+
+The broker's `application.yml` includes `spring.rsocket.server.spec.protocols: rsocket` which tells Spring to confirm the subprotocol. If you override broker configuration, make sure this property is preserved:
+
+```yaml
+spring:
+  rsocket:
+    server:
+      transport: websocket
+      mapping-path: /rsocket
+      spec:
+        protocols: rsocket
+```
+
+Note: this issue does not manifest in the Docker Compose stack because Caddy's reverse proxy passes the `Sec-WebSocket-Protocol` header through to the client, effectively masking the missing server confirmation.
+
+## 10. Notes and tradeoffs
 
 - This deployment bundle is intentionally single-instance for the stateful services.
 - Grafana, Loki, Prometheus, MinIO, and PostgreSQL use single PVC-backed workloads.
