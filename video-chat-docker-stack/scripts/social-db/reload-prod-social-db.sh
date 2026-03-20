@@ -5,6 +5,19 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(basename -- "${ROOT_DIR}")}"
 
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/reload-prod-social-db.sh [dump-file]
+
+Restore a production social-db dump into the configured dev database. If no dump
+file is provided, the newest backups/*.dump file is used.
+
+Arguments:
+  dump-file      Optional dump file to restore. Defaults to the newest backups/*.dump.
+  -h, --help     Show this help text.
+EOF
+}
+
 find_running_container() {
   local service_name="${1}"
 
@@ -16,6 +29,16 @@ find_running_container() {
 }
 
 cd "${ROOT_DIR}"
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -gt 1 ]]; then
+  usage >&2
+  exit 1
+fi
 
 resolve_default_dump() {
   shopt -s nullglob
@@ -46,7 +69,7 @@ target_db="$(resolve_dev_db_name)"
 
 if [[ -z "${dump_file}" ]]; then
   if ! dump_file="$(resolve_default_dump)"; then
-    echo 'Usage: ./scripts/reload-prod-social-db.sh <dump-file>' >&2
+    usage >&2
     echo 'No dump file was provided and no backups/*.dump files were found.' >&2
     exit 1
   fi

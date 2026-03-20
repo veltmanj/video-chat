@@ -3,8 +3,30 @@ set -euo pipefail
 
 # Builds and starts the stack with frontend developer diagnostics enabled.
 
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/up-dev.sh
+
+Build and start the local Docker Compose stack in development mode, using the
+isolated dev social database and seeded sample profiles.
+
+Arguments:
+  -h, --help    Show this help text.
+EOF
+}
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -ne 0 ]]; then
+  usage >&2
+  exit 1
+fi
 
 cd "${ROOT_DIR}"
 

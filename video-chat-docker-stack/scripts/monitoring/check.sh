@@ -3,9 +3,31 @@ set -euo pipefail
 
 # Sanity-checks the running stack from the host machine.
 
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/check.sh
+
+Run host-side sanity checks against the running local stack, including Docker
+Compose status, backend health endpoints, edge routing, Prometheus, Loki, and Grafana.
+
+Arguments:
+  -h, --help    Show this help text.
+EOF
+}
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 cd "${ROOT_DIR}"
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -ne 0 ]]; then
+  usage >&2
+  exit 1
+fi
 
 # Reuse the configured deployment host and force curl back to localhost so the checks work even when
 # DNS or client routing is not fully in place on the machine running the script.

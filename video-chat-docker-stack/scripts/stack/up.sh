@@ -3,8 +3,29 @@ set -euo pipefail
 
 # Builds and starts the full local deployment stack.
 
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/up.sh
+
+Build and start the full local Docker Compose stack in the background.
+
+Arguments:
+  -h, --help    Show this help text.
+EOF
+}
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -ne 0 ]]; then
+  usage >&2
+  exit 1
+fi
 
 cd "${ROOT_DIR}"
 

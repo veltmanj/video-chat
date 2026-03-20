@@ -5,8 +5,26 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 ENV_FILE="${ROOT_DIR}/.env"
 
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/configure-google-oauth.sh <google-oauth-client-id>
+
+Update GOOGLE_OAUTH_CLIENT_ID in .env and rebuild the frontend container so the
+runtime config picks up the new Google OAuth client id.
+
+Arguments:
+  google-oauth-client-id   Google OAuth web client id to write into .env.
+  -h, --help               Show this help text.
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
 if [[ $# -ne 1 ]]; then
-  echo "Usage: $0 <google-oauth-client-id>" >&2
+  usage >&2
   exit 1
 fi
 

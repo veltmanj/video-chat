@@ -39,7 +39,7 @@ require_command() {
 }
 
 usage() {
-  cat >&2 <<'EOF'
+  cat <<'EOF'
 Usage:
   SOCIAL_BEARER_TOKEN=<google-id-token> ./scripts/social-media-smoke.sh
 
@@ -56,6 +56,16 @@ Notes:
   - The script creates a smoke-test post and does not delete it.
 EOF
 }
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -ne 0 ]]; then
+  usage >&2
+  exit 1
+fi
 
 write_default_png() {
   local output_path="$1"

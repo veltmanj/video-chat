@@ -1,6 +1,29 @@
 #!/bin/sh
 set -eu
 
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/social-db/seed-dev-social-db.sh
+
+Seed the dev social database inside the container environment when
+SOCIAL_DB_SEED_ENABLED=true. Existing profiles are left intact unless
+SOCIAL_DB_SEED_FORCE=true.
+
+Arguments:
+  -h, --help    Show this help text.
+EOF
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
+if [ "$#" -ne 0 ]; then
+  usage >&2
+  exit 1
+fi
+
 if [ "${SOCIAL_DB_SEED_ENABLED:-false}" != "true" ]; then
   echo "Dev social seed disabled; skipping."
   exit 0

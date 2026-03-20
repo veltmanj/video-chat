@@ -4,12 +4,34 @@ set -euo pipefail
 # Verifies the local monitoring stack end-to-end:
 # Prometheus targets, Grafana dashboards, Loki/Promtail log flow, and a fresh backoffice access-log event.
 
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/monitoring-smoke.sh
+
+Run an end-to-end smoke test of the local monitoring stack:
+Prometheus, Grafana, Loki, Promtail, and fresh backoffice telemetry.
+
+Arguments:
+  -h, --help    Show this help text.
+EOF
+}
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 PROMTAIL_CURL_IMAGE="${PROMTAIL_CURL_IMAGE:-curlimages/curl:8.8.0}"
 STACK_NETWORK="${STACK_NETWORK:-videochat-network}"
 
 cd "${ROOT_DIR}"
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -ne 0 ]]; then
+  usage >&2
+  exit 1
+fi
 
 read_env_value() {
   local key="$1"

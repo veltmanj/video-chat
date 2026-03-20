@@ -15,6 +15,29 @@ HTTP_RESOLVE=()
 
 cd "${ROOT_DIR}"
 
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/security-drill.sh
+
+Run the live security drill against the local stack. The script probes the
+frontend, backoffice, and broker for obvious exposure, applies automatic
+mitigations in .env if needed, rebuilds edge services, and retries the probes.
+
+Arguments:
+  -h, --help    Show this help text.
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -ne 0 ]]; then
+  usage >&2
+  exit 1
+fi
+
 read_env_value() {
   local key="$1"
   local value

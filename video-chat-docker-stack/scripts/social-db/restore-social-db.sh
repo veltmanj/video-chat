@@ -5,6 +5,20 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(basename -- "${ROOT_DIR}")}"
 
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/restore-social-db.sh <dump-file> [target-db-name]
+
+Restore a PostgreSQL custom-format dump into the running local social-db
+container. If target-db-name is omitted, the active POSTGRES_DB is used.
+
+Arguments:
+  dump-file        Path to the dump file to restore.
+  target-db-name   Optional database name to restore into.
+  -h, --help       Show this help text.
+EOF
+}
+
 find_running_container() {
   local service_name="${1}"
 
@@ -17,11 +31,21 @@ find_running_container() {
 
 cd "${ROOT_DIR}"
 
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
 dump_file="${1:-}"
 target_db="${2:-}"
 
 if [[ -z "${dump_file}" ]]; then
-  echo 'Usage: ./scripts/restore-social-db.sh <dump-file> [target-db-name]' >&2
+  usage >&2
+  exit 1
+fi
+
+if [[ $# -gt 2 ]]; then
+  usage >&2
   exit 1
 fi
 

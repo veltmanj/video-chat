@@ -5,6 +5,18 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(basename -- "${ROOT_DIR}")}"
 
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/backup-social-db.sh [output-path]
+
+Create a PostgreSQL custom-format dump from the running local social-db container.
+
+Arguments:
+  output-path    Optional path for the dump file. Defaults to backups/social-db-<db>-<timestamp>.dump.
+  -h, --help     Show this help text.
+EOF
+}
+
 find_running_container() {
   local service_name="${1}"
 
@@ -16,6 +28,16 @@ find_running_container() {
 }
 
 cd "${ROOT_DIR}"
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -gt 1 ]]; then
+  usage >&2
+  exit 1
+fi
 
 social_db_container="$(find_running_container social-db)"
 if [[ -z "${social_db_container}" ]]; then
