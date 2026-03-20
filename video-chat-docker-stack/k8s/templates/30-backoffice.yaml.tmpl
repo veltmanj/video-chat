@@ -32,7 +32,7 @@ spec:
       containers:
         - name: backoffice
           image: ${BACKOFFICE_IMAGE}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 7901
               name: http
@@ -77,4 +77,3 @@ spec:
               port: 7901
             initialDelaySeconds: 40
             periodSeconds: 20
-

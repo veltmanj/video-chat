@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Local or generic Kubernetes bootstrap:
+# - seed k8s.env from the compose-oriented local stack
+# - install shared cluster prerequisites when needed
+# - build, render, validate, and apply the Kubernetes bundle
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/common.sh"
@@ -27,6 +32,8 @@ Options:
   --skip-self-signed-tls        Do not recreate the TLS secret
   --skip-ingress-install        Do not install ingress-nginx automatically
   --skip-docker-desktop-expose  Do not patch Docker Desktop ingress to :8080/:8443
+  --verbose                     Show narrated step-by-step output (default)
+  --quiet                       Reduce output to command errors and the final summary
   --help                        Show this help text
 EOF
 }
@@ -65,6 +72,14 @@ while [[ $# -gt 0 ]]; do
       SKIP_DOCKER_DESKTOP_EXPOSE=true
       shift
       ;;
+    --verbose)
+      set_log_level verbose
+      shift
+      ;;
+    --quiet)
+      set_log_level quiet
+      shift
+      ;;
     --help|-h)
       usage
       exit 0
@@ -78,81 +93,6 @@ done
 COMPOSE_ENV_FILE="${ROOT_DIR}/.env"
 DEFAULT_INGRESS_NGINX_MANIFEST_URL="${K8S_INGRESS_NGINX_MANIFEST_URL:-https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.2/deploy/static/provider/cloud/deploy.yaml}"
 INGRESS_INSTALLED_BY_BOOTSTRAP=false
-
-trim_cr() {
-  printf '%s' "${1%$'\r'}"
-}
-
-read_env_value() {
-  local file="$1"
-  local key="$2"
-
-  [[ -f "${file}" ]] || return 0
-
-  awk -F= -v key="${key}" '
-    $0 ~ "^[[:space:]]*#" { next }
-    $1 == key {
-      sub(/^[^=]*=/, "", $0)
-      print $0
-      exit
-    }
-  ' "${file}"
-}
-
-write_env_value() {
-  local file="$1"
-  local key="$2"
-  local value="$3"
-  local tmp_file
-
-  tmp_file="$(mktemp)"
-
-  if [[ -f "${file}" ]]; then
-    awk -F= -v key="${key}" -v value="${value}" '
-      BEGIN { updated = 0 }
-      $1 == key {
-        print key "=" value
-        updated = 1
-        next
-      }
-      { print }
-      END {
-        if (!updated) {
-          print key "=" value
-        }
-      }
-    ' "${file}" > "${tmp_file}"
-  else
-    printf '%s=%s\n' "${key}" "${value}" > "${tmp_file}"
-  fi
-
-  mv "${tmp_file}" "${file}"
-}
-
-ensure_env_value() {
-  local file="$1"
-  local key="$2"
-  local desired="$3"
-  local current
-
-  current="$(trim_cr "$(read_env_value "${file}" "${key}")")"
-  if [[ -z "${current}" ]]; then
-    write_env_value "${file}" "${key}" "${desired}"
-  fi
-}
-
-ensure_env_value_if_equals() {
-  local file="$1"
-  local key="$2"
-  local old_value="$3"
-  local desired="$4"
-  local current
-
-  current="$(trim_cr "$(read_env_value "${file}" "${key}")")"
-  if [[ -z "${current}" || "${current}" == "${old_value}" ]]; then
-    write_env_value "${file}" "${key}" "${desired}"
-  fi
-}
 
 random_alnum() {
   local length="${1:-32}"
@@ -280,41 +220,52 @@ seed_env_from_local_stack() {
   [[ -n "${grafana_admin_password}" ]] || write_env_value "${ENV_FILE}" "GRAFANA_ADMIN_PASSWORD" "$(random_alnum 32)"
 }
 
+# For Docker Desktop and lightweight local clusters, bootstrap can install
+# ingress-nginx automatically instead of expecting a separate platform layer.
 ensure_ingress_controller() {
   if kubectl get ingressclass "${K8S_INGRESS_CLASS_NAME}" >/dev/null 2>&1; then
+    log_info "Ingress class ${K8S_INGRESS_CLASS_NAME} already exists."
     return
   fi
 
   [[ "${K8S_INGRESS_CLASS_NAME}" == "nginx" ]] || fail "Ingress class ${K8S_INGRESS_CLASS_NAME} is missing. Install your ingress controller first or use ingress class nginx."
 
-  echo "Installing ingress-nginx from ${DEFAULT_INGRESS_NGINX_MANIFEST_URL}"
-  kubectl apply -f "${DEFAULT_INGRESS_NGINX_MANIFEST_URL}" >/dev/null
-  kubectl rollout status deployment/ingress-nginx-controller --namespace ingress-nginx --timeout=300s
-  kubectl annotate namespace ingress-nginx videochat.nextend/installed-by-bootstrap=true --overwrite >/dev/null
+  log_info "Installing ingress-nginx from ${DEFAULT_INGRESS_NGINX_MANIFEST_URL}"
+  run_with_log_mode kubectl apply -f "${DEFAULT_INGRESS_NGINX_MANIFEST_URL}"
+  run_with_log_mode kubectl rollout status deployment/ingress-nginx-controller --namespace ingress-nginx --timeout=300s
+  run_with_log_mode kubectl annotate namespace ingress-nginx videochat.nextend/installed-by-bootstrap=true --overwrite
 
   # Disable HTTP/2 on the ingress frontend so Chrome can use HTTP/1.1 WebSocket upgrades.
-  kubectl patch configmap ingress-nginx-controller --namespace ingress-nginx \
-    --type merge -p '{"data":{"use-http2":"false"}}' >/dev/null
-  kubectl rollout restart deployment/ingress-nginx-controller --namespace ingress-nginx >/dev/null
-  kubectl rollout status deployment/ingress-nginx-controller --namespace ingress-nginx --timeout=300s
+  run_with_log_mode kubectl patch configmap ingress-nginx-controller --namespace ingress-nginx \
+    --type merge -p '{"data":{"use-http2":"false"}}'
+  run_with_log_mode kubectl rollout restart deployment/ingress-nginx-controller --namespace ingress-nginx
+  run_with_log_mode kubectl rollout status deployment/ingress-nginx-controller --namespace ingress-nginx --timeout=300s
 
   INGRESS_INSTALLED_BY_BOOTSTRAP=true
 }
 
 delete_namespace_and_wait() {
   if ! kubectl get namespace "${K8S_NAMESPACE}" >/dev/null 2>&1; then
+    log_info "Namespace ${K8S_NAMESPACE} does not exist yet."
     return
   fi
 
-  kubectl delete namespace "${K8S_NAMESPACE}" --wait=false >/dev/null
+  run_with_log_mode kubectl delete namespace "${K8S_NAMESPACE}" --wait=false
 
   until ! kubectl get namespace "${K8S_NAMESPACE}" >/dev/null 2>&1; do
     sleep 2
   done
 }
 
+log_step "Preparing local Kubernetes env"
 seed_env_from_local_stack
 load_k8s_env "${ENV_FILE}"
+
+log_info "Env file: ${ENV_FILE}"
+log_info "Context: $(current_context)"
+log_info "Namespace: ${K8S_NAMESPACE}"
+log_info "Host: ${K8S_HOST}"
+log_info "Image tag: ${K8S_IMAGE_TAG}"
 
 if [[ -z "${K8S_IMAGE_REGISTRY:-}" && "$(current_context)" != "docker-desktop" ]]; then
   echo "Warning: K8S_IMAGE_REGISTRY is blank and the current context is not docker-desktop." >&2
@@ -322,30 +273,51 @@ if [[ -z "${K8S_IMAGE_REGISTRY:-}" && "$(current_context)" != "docker-desktop" ]
 fi
 
 if [[ "${SKIP_INGRESS_INSTALL}" != "true" ]]; then
+  log_step "Ensuring ingress controller"
   ensure_ingress_controller
+else
+  log_skip "ingress installation because --skip-ingress-install was provided."
 fi
 
 if [[ "${RECREATE_NAMESPACE}" == "true" ]]; then
-  echo "Deleting namespace ${K8S_NAMESPACE} for a clean rebuild"
+  log_step "Recreating namespace"
+  log_info "Deleting namespace ${K8S_NAMESPACE} for a clean rebuild."
   delete_namespace_and_wait
+else
+  log_skip "namespace recreation because --recreate-namespace was not provided."
 fi
 
 if [[ "${SKIP_BUILD}" != "true" ]]; then
-  "${SCRIPT_DIR}/build-images.sh" "${ENV_FILE}"
+  log_step "Building application images"
+  run_with_log_mode "${SCRIPT_DIR}/build-images.sh" --env "${ENV_FILE}" "--${LOG_LEVEL}"
+else
+  log_skip "image build because --skip-build was provided."
 fi
 
-"${SCRIPT_DIR}/validate.sh" "${ENV_FILE}"
+log_step "Validating manifests"
+run_with_log_mode "${SCRIPT_DIR}/validate.sh" --env "${ENV_FILE}" "--${LOG_LEVEL}"
 
 if [[ "${SKIP_SELF_SIGNED_TLS}" != "true" ]]; then
-  "${SCRIPT_DIR}/create-self-signed-tls.sh" "${ENV_FILE}"
+  log_step "Ensuring TLS secret"
+  run_with_log_mode "${SCRIPT_DIR}/create-self-signed-tls.sh" --env "${ENV_FILE}" "--${LOG_LEVEL}"
+else
+  log_skip "self-signed TLS creation because --skip-self-signed-tls was provided."
 fi
 
-"${SCRIPT_DIR}/apply.sh" "${ENV_FILE}"
+log_step "Applying stack to Kubernetes"
+run_with_log_mode "${SCRIPT_DIR}/apply.sh" --env "${ENV_FILE}" "--${LOG_LEVEL}"
 
 if [[ "$(current_context)" == "docker-desktop" && "${SKIP_DOCKER_DESKTOP_EXPOSE}" != "true" ]]; then
-  "${SCRIPT_DIR}/expose-docker-desktop.sh" "${ENV_FILE}"
+  log_step "Exposing ingress for Docker Desktop"
+  run_with_log_mode "${SCRIPT_DIR}/expose-docker-desktop.sh" --env "${ENV_FILE}" "--${LOG_LEVEL}"
+elif [[ "$(current_context)" != "docker-desktop" ]]; then
+  log_skip "Docker Desktop ingress exposure because current context is not docker-desktop."
+else
+  log_skip "Docker Desktop ingress exposure because --skip-docker-desktop-expose was provided."
 fi
 
 echo
 echo "Bootstrap complete."
-kubectl get pods,svc,ingress,pvc --namespace "${K8S_NAMESPACE}"
+if [[ "${LOG_LEVEL}" != "quiet" ]]; then
+  kubectl get pods,svc,ingress,pvc --namespace "${K8S_NAMESPACE}"
+fi

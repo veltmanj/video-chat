@@ -32,6 +32,8 @@ metadata:
   name: loki
   namespace: ${K8S_NAMESPACE}
 spec:
+  strategy:
+    type: Recreate
   replicas: 1
   selector:
     matchLabels:
@@ -42,10 +44,16 @@ spec:
         app.kubernetes.io/name: loki
         app: loki
     spec:
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: loki
           image: grafana/loki:3.6.0
           imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 10001
+            runAsGroup: 10001
           args:
             - -config.file=/etc/loki/loki-config.yml
           ports:
@@ -64,4 +72,3 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: loki-data
-

@@ -6,7 +6,49 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/common.sh"
 
 require_command kubectl
-load_k8s_env "${1:-${ENV_FILE_DEFAULT}}"
+
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/k8s/expose-docker-desktop.sh [options]
+
+Patch ingress-nginx on Docker Desktop to listen on localhost-friendly ports.
+
+Options:
+  --env <path>    Use a specific env file instead of k8s/k8s.env
+  --verbose       Show narrated step-by-step output (default)
+  --quiet         Reduce output to command errors and the final summary
+  --help          Show this help text
+EOF
+}
+
+ENV_FILE="${ENV_FILE_DEFAULT}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --env)
+      [[ $# -ge 2 ]] || fail "--env requires a path"
+      ENV_FILE="$2"
+      shift 2
+      ;;
+    --verbose)
+      set_log_level verbose
+      shift
+      ;;
+    --quiet)
+      set_log_level quiet
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "Unknown option: $1"
+      ;;
+  esac
+done
+
+load_k8s_env "${ENV_FILE}"
 
 HTTP_PORT="${K8S_DOCKER_DESKTOP_HTTP_PORT:-8080}"
 HTTPS_PORT="${K8S_DOCKER_DESKTOP_HTTPS_PORT:-8443}"
@@ -42,7 +84,8 @@ fi
 
 [[ -n "${HOST}" ]] || fail "Could not determine an ingress host. Export K8S_HOST or create the ingress objects first."
 
-kubectl patch svc "${INGRESS_SERVICE}" \
+log_step "Patching Docker Desktop ingress service"
+run_with_log_mode kubectl patch svc "${INGRESS_SERVICE}" \
   --namespace "${INGRESS_NAMESPACE}" \
   --type='merge' \
   -p "{
@@ -64,17 +107,20 @@ kubectl patch svc "${INGRESS_SERVICE}" \
         }
       ]
     }
-  }" >/dev/null
+  }"
 
-kubectl annotate svc "${INGRESS_SERVICE}" \
+log_step "Recording original ingress ports in annotations"
+run_with_log_mode kubectl annotate svc "${INGRESS_SERVICE}" \
   --namespace "${INGRESS_NAMESPACE}" \
   "${MANAGED_ANNOTATION_KEY}=true" \
   "${ORIGINAL_HTTP_ANNOTATION_KEY}=${ORIGINAL_HTTP_PORT:-80}" \
   "${ORIGINAL_HTTPS_ANNOTATION_KEY}=${ORIGINAL_HTTPS_PORT:-443}" \
-  --overwrite >/dev/null
+  --overwrite
 
 echo "Docker Desktop ingress exposed on:"
 echo "  https://${HOST}:${HTTPS_PORT}/"
 echo
-echo "Service status:"
-kubectl get svc "${INGRESS_SERVICE}" --namespace "${INGRESS_NAMESPACE}" -o wide
+if [[ "${LOG_LEVEL}" != "quiet" ]]; then
+  echo "Service status:"
+  kubectl get svc "${INGRESS_SERVICE}" --namespace "${INGRESS_NAMESPACE}" -o wide
+fi

@@ -42,6 +42,8 @@ spec:
               value: "${SOCIAL_DB_NAME}"
             - name: POSTGRES_USER
               value: "${SOCIAL_DB_USER}"
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -76,4 +78,3 @@ spec:
         resources:
           requests:
             storage: ${K8S_SOCIAL_DB_STORAGE_SIZE}
-

@@ -32,6 +32,8 @@ metadata:
   name: grafana
   namespace: ${K8S_NAMESPACE}
 spec:
+  strategy:
+    type: Recreate
   replicas: 1
   selector:
     matchLabels:
@@ -42,10 +44,16 @@ spec:
         app.kubernetes.io/name: grafana
         app: grafana
     spec:
+      securityContext:
+        fsGroup: 472
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: grafana
           image: grafana/grafana:11.1.0
           imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 472
+            runAsGroup: 472
           ports:
             - containerPort: 3000
               name: http

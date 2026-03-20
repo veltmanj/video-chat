@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Remove the stack namespace and optionally undo the shared ingress tweaks that
+# bootstrap.sh applied for local Docker Desktop clusters.
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/common.sh"
@@ -19,6 +22,8 @@ Options:
   --delete-ingress-nginx        Force uninstall ingress-nginx after deleting the app namespace
   --delete-env-file             Remove the local k8s env file after teardown
   --delete-rendered             Remove k8s/rendered after teardown
+  --verbose                     Show narrated step-by-step output (default)
+  --quiet                       Reduce output to command errors and the final summary
   --help                        Show this help text
 EOF
 }
@@ -45,6 +50,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --delete-rendered)
       DELETE_RENDERED=true
+      shift
+      ;;
+    --verbose)
+      set_log_level verbose
+      shift
+      ;;
+    --quiet)
+      set_log_level quiet
       shift
       ;;
     --help|-h)
@@ -85,13 +98,17 @@ wait_for_namespace_deletion() {
 
 delete_namespace_and_wait() {
   if ! kubectl get namespace "${K8S_NAMESPACE}" >/dev/null 2>&1; then
+    log_info "Namespace ${K8S_NAMESPACE} does not exist."
     return
   fi
 
-  kubectl delete namespace "${K8S_NAMESPACE}" --wait=false >/dev/null
+  run_with_log_mode kubectl delete namespace "${K8S_NAMESPACE}" --wait=false
   wait_for_namespace_deletion "${K8S_NAMESPACE}"
 }
 
+# Docker Desktop exposure rewrites the ingress-nginx Service ports. Restore the
+# original ports before removing ingress so the shared cluster returns to a sane
+# default state.
 service_annotation() {
   local key="$1"
 
@@ -107,9 +124,12 @@ reset_docker_desktop_exposure() {
   original_http="$(service_annotation 'videochat\.nextend/original-http-port')"
   original_https="$(service_annotation 'videochat\.nextend/original-https-port')"
 
-  [[ -n "${managed}" ]] || return
+  if [[ -z "${managed}" ]]; then
+    log_info "Docker Desktop ingress exposure annotations are not present."
+    return
+  fi
 
-  kubectl patch svc "${INGRESS_SERVICE}" \
+  run_with_log_mode kubectl patch svc "${INGRESS_SERVICE}" \
     --namespace "${INGRESS_NAMESPACE}" \
     --type='merge' \
     -p "{
@@ -138,9 +158,9 @@ reset_docker_desktop_exposure() {
           }
         ]
       }
-    }" >/dev/null
+    }"
 
-  echo "Reset Docker Desktop ingress exposure on ${INGRESS_NAMESPACE}/${INGRESS_SERVICE}"
+  log_info "Reset Docker Desktop ingress exposure on ${INGRESS_NAMESPACE}/${INGRESS_SERVICE}."
 }
 
 ingress_installed_by_bootstrap() {
@@ -152,33 +172,45 @@ ingress_installed_by_bootstrap() {
 
 delete_ingress_nginx_if_managed() {
   if [[ "${DELETE_INGRESS_NGINX}" != "true" ]] && ! ingress_installed_by_bootstrap; then
-    echo "Leaving ingress-nginx installed because it is not marked as bootstrap-managed."
+    log_skip "ingress-nginx removal because it is not marked as bootstrap-managed."
     return
   fi
 
-  kubectl delete -f "${DEFAULT_INGRESS_NGINX_MANIFEST_URL}" --ignore-not-found >/dev/null || true
+  run_with_log_mode kubectl delete -f "${DEFAULT_INGRESS_NGINX_MANIFEST_URL}" --ignore-not-found || true
   wait_for_namespace_deletion "${INGRESS_NAMESPACE}"
 
-  echo "Removed ingress-nginx"
+  log_info "Removed ingress-nginx."
 }
 
-echo "Deleting namespace ${K8S_NAMESPACE}"
+# Teardown order:
+# - delete the app namespace first
+# - then restore ingress service state
+# - finally remove ingress-nginx only when bootstrap owned it
+log_step "Deleting application namespace"
 delete_namespace_and_wait
 
 if kubectl get svc "${INGRESS_SERVICE}" --namespace "${INGRESS_NAMESPACE}" >/dev/null 2>&1; then
+  log_step "Resetting Docker Desktop ingress service"
   reset_docker_desktop_exposure
 fi
 
 if kubectl get namespace "${INGRESS_NAMESPACE}" >/dev/null 2>&1; then
+  log_step "Handling ingress-nginx cleanup"
   delete_ingress_nginx_if_managed
 fi
 
 if [[ "${DELETE_RENDERED}" == "true" ]]; then
+  log_step "Removing rendered manifest cache"
   rm -rf "${RENDER_DIR}"
+else
+  log_skip "rendered manifest deletion because --delete-rendered was not provided."
 fi
 
 if [[ "${DELETE_ENV_FILE}" == "true" ]]; then
+  log_step "Removing local env file"
   rm -f "${ENV_FILE}"
+else
+  log_skip "local env file deletion because --delete-env-file was not provided."
 fi
 
 echo "Teardown complete."

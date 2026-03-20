@@ -1,0 +1,139 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: ${K8S_GKE_GATEWAY_NAME}
+  namespace: ${K8S_NAMESPACE}
+spec:
+  gatewayClassName: ${K8S_GKE_GATEWAY_CLASS}
+  addresses:
+    - type: NamedAddress
+      value: ${K8S_GKE_GATEWAY_ADDRESS_NAME}
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: ${K8S_HOST}
+      tls:
+        mode: Terminate
+        options:
+          networking.gke.io/pre-shared-certs: ${K8S_GKE_GATEWAY_SSL_CERTIFICATE_NAME}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: http
+      protocol: HTTP
+      port: 80
+      hostname: ${K8S_HOST}
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: http-redirect
+  namespace: ${K8S_NAMESPACE}
+spec:
+  parentRefs:
+    - name: ${K8S_GKE_GATEWAY_NAME}
+      sectionName: http
+  hostnames:
+    - "${K8S_HOST}"
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: broker
+  namespace: ${K8S_NAMESPACE}
+spec:
+  parentRefs:
+    - name: ${K8S_GKE_GATEWAY_NAME}
+      sectionName: https
+  hostnames:
+    - "${K8S_HOST}"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /rsocket
+      backendRefs:
+        - name: broker
+          port: 9898
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: social-api
+  namespace: ${K8S_NAMESPACE}
+spec:
+  parentRefs:
+    - name: ${K8S_GKE_GATEWAY_NAME}
+      sectionName: https
+  hostnames:
+    - "${K8S_HOST}"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /social-api/social
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /social
+      backendRefs:
+        - name: backoffice
+          port: 7901
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: backoffice-api
+  namespace: ${K8S_NAMESPACE}
+spec:
+  parentRefs:
+    - name: ${K8S_GKE_GATEWAY_NAME}
+      sectionName: https
+  hostnames:
+    - "${K8S_HOST}"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /backoffice-api/api
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /api
+      backendRefs:
+        - name: backoffice
+          port: 7901
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: frontend
+  namespace: ${K8S_NAMESPACE}
+spec:
+  parentRefs:
+    - name: ${K8S_GKE_GATEWAY_NAME}
+      sectionName: https
+  hostnames:
+    - "${K8S_HOST}"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: frontend
+          port: 80

@@ -32,6 +32,8 @@ metadata:
   name: prometheus
   namespace: ${K8S_NAMESPACE}
 spec:
+  strategy:
+    type: Recreate
   replicas: 1
   selector:
     matchLabels:
@@ -42,10 +44,16 @@ spec:
         app.kubernetes.io/name: prometheus
         app: prometheus
     spec:
+      securityContext:
+        fsGroup: 65534
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: prometheus
           image: prom/prometheus:v2.54.1
           imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 65534
+            runAsGroup: 65534
           args:
             - --config.file=/etc/prometheus/prometheus.yml
             - --storage.tsdb.path=/prometheus
@@ -66,4 +74,3 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: prometheus-data
-

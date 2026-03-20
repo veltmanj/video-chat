@@ -4,6 +4,68 @@ Docker Compose stack for the Angular frontend, RSocket broker, Spring Boot backo
 
 For Kubernetes deployment, configuration, and automation scripts, see [docs/INSTALL-CONFIGURE-MAINTAIN-KUBERNETES.md](./docs/INSTALL-CONFIGURE-MAINTAIN-KUBERNETES.md).
 
+For a full Google Kubernetes Engine path that provisions the public entrypoint as well, use:
+
+```bash
+cp k8s/k8s.env.example k8s/k8s.env
+# set K8S_HOST, GOOGLE_OAUTH_CLIENT_ID, and your GCP values in k8s/k8s.env
+./scripts/gke/bootstrap.sh
+```
+
+You can size the cluster directly at bootstrap time, for example:
+```bash
+./scripts/gke/bootstrap.sh --machine-type e2-standard-2 --node-count 1
+```
+
+`e2-standard-2` means 2 vCPUs and 8 GB RAM per node. At the same node count it
+is materially cheaper than `e2-standard-4` because `e2-standard-4` doubles that
+to 4 vCPUs and 16 GB RAM. In practice, node count multiplies the cost again, so
+`2 x e2-standard-4` is a much more expensive baseline than `1 x e2-standard-2`.
+See the Kubernetes install guide for a short sizing guide and the main machine
+family options.
+
+That flow uses GKE Gateway, a global static IP, a Google-managed certificate, and Artifact Registry while preserving the public app paths already used by the frontend.
+If `GCP_PROJECT_ID` does not exist yet, the bootstrap can create it and optionally link billing when `GCP_BILLING_ACCOUNT` is set.
+
+For a frontend-only production rollout after Angular changes:
+
+```bash
+./scripts/gke/deploy-frontend.sh
+```
+
+By default that forces `VIDEOCHAT_APP_MODE=production`. Use
+`./scripts/gke/deploy-frontend.sh --runmode dev` only when you explicitly want
+frontend developer diagnostics.
+
+To access the private Grafana instance safely over `kubectl port-forward`:
+
+```bash
+./scripts/gke/access-grafana.sh
+```
+
+To report actual spend so far for the GKE project, backed by Cloud Billing
+export to BigQuery:
+
+```bash
+./scripts/gke/show-expenses.sh
+```
+
+This requires a one-time Cloud Billing export to BigQuery setup. The full setup
+steps are documented in [docs/INSTALL-CONFIGURE-MAINTAIN-KUBERNETES.md](./docs/INSTALL-CONFIGURE-MAINTAIN-KUBERNETES.md).
+
+To tear it back down again:
+
+```bash
+./scripts/gke/teardown.sh
+```
+
+To replace the cluster itself while keeping the static IP, managed certificate,
+DNS record, Artifact Registry repository, and local env file, use:
+
+```bash
+./scripts/gke/recreate.sh --yes
+```
+
 ## Included services
 
 - Angular frontend

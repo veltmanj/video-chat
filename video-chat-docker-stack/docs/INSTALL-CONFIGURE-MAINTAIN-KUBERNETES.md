@@ -12,11 +12,11 @@ This guide describes the Kubernetes deployment bundle for the video chat stack. 
 - Prometheus and blackbox-exporter
 - Loki and Promtail
 - Grafana
-- Ingress-based HTTPS routing
+- Ingress- or Gateway-based HTTPS routing
 
 The Kubernetes bundle is intentionally more Kubernetes-native than the Docker Compose stack:
 
-- Caddy is replaced by a standard Kubernetes Ingress.
+- Caddy is replaced by a standard Kubernetes Ingress or, on GKE, a managed Gateway.
 - Runtime secrets come from Kubernetes `Secret` resources instead of Compose-only file handoff.
 - The broker can load JWKS directly from configured provider URLs, so Vault is not required for Kubernetes.
 
@@ -32,10 +32,16 @@ docker version
 openssl version
 ```
 
+Optional for GKE automation:
+
+```bash
+gcloud version
+```
+
 Cluster prerequisites:
 
 - A reachable Kubernetes cluster
-- An Ingress controller, such as ingress-nginx
+- Either an Ingress controller, such as ingress-nginx, or GKE Gateway API support
 - A default or known storage class for persistent volumes
 - Image pull access to the registry that will hold the frontend, broker, and backoffice images
 
@@ -47,6 +53,245 @@ Sibling repositories required for image builds:
 
 ## 3. Initial setup
 
+Choose one of these paths:
+
+- Generic Kubernetes: keep `K8S_EXPOSURE_MODE=ingress-nginx` and use the existing `scripts/k8s/*` flow.
+- GKE public deployment: set `K8S_EXPOSURE_MODE=gke-gateway` and use `./scripts/gke/bootstrap.sh`.
+- Frontend-only GKE rollout: use `./scripts/gke/deploy-frontend.sh` when only the Angular app changed.
+
+### 3.1 GKE fast path
+
+Copy the template and set the public inputs:
+
+```bash
+cd "${REPO_ROOT}/video-chat-docker-stack"
+cp k8s/k8s.env.example k8s/k8s.env
+```
+
+Set at least:
+
+- `K8S_HOST`: public hostname for end users, for example `videochat.example.com`
+- `GOOGLE_OAUTH_CLIENT_ID`: Google OAuth web client ID that allows `https://<K8S_HOST>`
+- `GCP_PROJECT_ID`: Google Cloud project that owns the GKE cluster
+- `GCP_PROJECT_NAME`: display name to use if the project must be created
+- `GCP_BILLING_ACCOUNT`: recommended when the project must be created and used for billable resources
+- `GCP_REGION`: Artifact Registry region, for example `europe-west4`
+- `GKE_CLUSTER_LOCATION`: GKE zone or region, for example `europe-west4-a`
+- `GCP_DNS_MANAGED_ZONE`: optional Cloud DNS managed zone for automated A-record updates
+
+Then run:
+
+```bash
+./scripts/gke/bootstrap.sh
+```
+
+If you want tighter control over cost and capacity, you can override the cluster
+shape directly when bootstrapping. Example:
+```bash
+./scripts/gke/bootstrap.sh --machine-type e2-standard-2 --node-count 1
+```
+
+The bootstrap script persists those values back into `k8s/k8s.env`, so later
+runs reuse the same cluster shape unless you change it again.
+
+### 3.2 GKE sizing guide
+
+The biggest recurring cost levers in this stack are:
+
+- `GKE_MACHINE_TYPE`: how much CPU and memory each node has
+- `GKE_NODE_COUNT`: how many nodes run all the time
+- persistent storage: the PostgreSQL, MinIO, Prometheus, Loki, and Grafana PVC sizes
+- public edge resources: the GKE Gateway/load balancer, static IP, and certificate
+
+For this stack, `e2-standard-2` is a good lower-cost default:
+
+- `e2-standard-2`: 2 vCPUs and 8 GB RAM per node
+- `e2-standard-4`: 4 vCPUs and 16 GB RAM per node
+
+That means `e2-standard-4` is roughly a double-sized compute node compared with
+`e2-standard-2`, and at the same node count it should be expected to cost
+materially more. Node count multiplies that again, so:
+
+- `1 x e2-standard-2`: leanest baseline for this stack
+- `2 x e2-standard-2`: more headroom and better resilience, but roughly doubles node spend
+- `2 x e2-standard-4`: much more expensive baseline and usually unnecessary unless real load proves it
+
+Common E2 options and what they mean:
+
+- `e2-standard-*`: balanced general-purpose nodes, about 4 GB RAM per vCPU
+- `e2-highmem-*`: more memory per vCPU, useful if Prometheus, Loki, or databases are memory constrained
+- `e2-highcpu-*`: less memory per vCPU, useful for CPU-heavy workloads that do not need much RAM
+- `e2-micro`, `e2-small`, `e2-medium`: smaller shared-core shapes, cheaper but usually too constrained for this full stack once monitoring and storage services are included
+
+Practical recommendation:
+
+- start with `--machine-type e2-standard-2 --node-count 1`
+- move to `2` nodes if you see resource pressure or want better availability during node maintenance
+- only move to `e2-standard-4` or a `highmem` family after observing actual CPU or memory pressure in Grafana/`kubectl top`
+
+Important limitation of the bootstrap automation:
+
+- bootstrap can resize node count on an existing cluster
+- bootstrap does not change the machine type of an existing node pool in place
+- if you want to move from `e2-standard-4` to `e2-standard-2` on an existing cluster, recreate the cluster or replace the node pool
+
+For later frontend-only production updates, use:
+
+```bash
+./scripts/gke/deploy-frontend.sh
+```
+
+Useful flags:
+
+- `--tag <value>`: deploy a specific frontend image tag
+- `--runmode dev`: switch the frontend runtime mode to `development`
+- `--skip-build`: reuse an already-pushed frontend image
+- `--timeout <value>`: override the rollout timeout
+
+By default, `deploy-frontend.sh` forces `VIDEOCHAT_APP_MODE=production`, even if
+`k8s/k8s.env` currently contains a different value.
+
+### Private Grafana Access
+
+Grafana is intentionally not exposed on the public GKE Gateway. The safest way
+to access it is with a local Kubernetes port-forward:
+
+```bash
+./scripts/gke/access-grafana.sh
+```
+
+That script:
+
+- reads the Grafana admin password from the `app-secrets` Kubernetes secret
+- prints the local URL and credentials
+- starts `kubectl port-forward svc/grafana 3000:3000`
+
+Optional flag:
+
+- `--port <value>`: use a different local port if `3000` is already in use
+
+### Spend Reporting
+
+To report actual spend for the configured GCP project, use:
+
+```bash
+./scripts/gke/show-expenses.sh
+```
+
+This script queries a Cloud Billing export in BigQuery and, by default, reports
+costs from the GCP project creation time until now.
+
+One-time setup:
+
+1. Open the official Google guide for Cloud Billing export to BigQuery:
+   https://docs.cloud.google.com/billing/docs/how-to/export-data-bigquery-setup
+2. In the Google Cloud console, choose a project to hold the billing dataset.
+   It can be `pulseroom-videochat`, but Google recommends a separate FinOps or billing-admin project. The dataset project must be linked to the same billing account.
+3. In BigQuery, create a dataset for billing data.
+   Suggested dataset name: `billing_export`
+4. In `Billing` -> `Billing export` -> `BigQuery export`, enable at least:
+   - `Standard usage cost data`
+   Optional:
+   - `Detailed usage cost data`
+5. Choose the dataset from step 3 and save.
+6. In BigQuery, note the resulting table name.
+   Typical names:
+   - `gcp_billing_export_v1_<billing_account_id>`
+   - `gcp_billing_export_resource_v1_<billing_account_id>`
+7. Add the export location to `k8s/k8s.env`.
+
+Required values in `k8s/k8s.env`:
+
+- `GCP_BILLING_EXPORT_PROJECT`
+- `GCP_BILLING_EXPORT_DATASET`
+- `GCP_BILLING_EXPORT_TABLE`
+
+Example:
+
+```bash
+GCP_BILLING_EXPORT_PROJECT=pulseroom-videochat
+GCP_BILLING_EXPORT_DATASET=billing_export
+GCP_BILLING_EXPORT_TABLE=gcp_billing_export_v1_01082F_532492_1620B4
+```
+
+If those values are blank, the script attempts to discover a standard or
+detailed billing export table automatically across the projects your active
+account can read.
+
+Notes:
+
+- `show-expenses.sh` reports actual spend from the billing export, not the heuristic cost rating printed by `bootstrap.sh`.
+- Standard usage cost export is sufficient for `show-expenses.sh`.
+- Detailed usage cost export is useful if you later want resource-level analysis, including GKE cost allocation.
+- BigQuery storage and queries for billing export incur small additional charges.
+- New billing rows are not instant. Expect some lag before fresh usage appears in BigQuery.
+
+What bootstrap does:
+
+- forces `K8S_EXPOSURE_MODE=gke-gateway`
+- creates the configured project if it does not exist yet
+- optionally links the project to `GCP_BILLING_ACCOUNT`
+- enables the required Google Cloud APIs
+- creates or reuses the Artifact Registry repository
+- creates or updates a Standard GKE cluster with Gateway API enabled
+- reserves a global static IP and creates a Google-managed SSL certificate
+- updates the Cloud DNS A record when `GCP_DNS_MANAGED_ZONE` is set
+- builds and pushes the frontend, broker, and backoffice images
+- applies the Kubernetes stack through the existing render and deploy flow
+
+The public routes remain:
+
+- `https://<K8S_HOST>/`
+- `wss://<K8S_HOST>/rsocket`
+- `https://<K8S_HOST>/social-api/social/v1/...`
+- `https://<K8S_HOST>/backoffice-api/api/...`
+
+Notes:
+
+- The bootstrap script generates strong values for `SOCIAL_DB_PASSWORD`, `MINIO_ROOT_PASSWORD`, and `GRAFANA_ADMIN_PASSWORD` when they are blank.
+- The Google-managed certificate may stay in `PROVISIONING` until the DNS A record for `K8S_HOST` points at the reserved static IP.
+- This stack currently uses a Promtail `DaemonSet` with `hostPath` mounts, so a Standard GKE cluster is the intended target, not Autopilot.
+
+To remove the deployed namespace plus the public GKE-side resources again:
+
+```bash
+./scripts/gke/teardown.sh
+```
+
+Useful GKE teardown flags:
+
+- `--delete-dns-record`: remove the public `A` record from `GCP_DNS_MANAGED_ZONE`
+- `--delete-cluster`: delete the configured GKE cluster
+- `--delete-artifact-repository`: delete the configured Artifact Registry repository
+- `--delete-env-file`: remove `k8s/k8s.env`
+- `--delete-rendered`: remove `k8s/rendered/`
+
+If you need to replace the cluster shape itself, for example to move from
+`e2-standard-4` to `e2-standard-2`, use:
+
+```bash
+./scripts/gke/recreate.sh --yes
+```
+
+Useful recreate flags:
+
+- `--machine-type <type>`
+- `--node-count <count>`
+- `--cluster-location <id>`
+- `--release-channel <id>`
+- `--skip-build`
+- `--skip-dns-update`
+
+How `recreate.sh` differs from `teardown.sh`:
+
+- `recreate.sh` is for replacing the cluster and then redeploying the stack
+- `teardown.sh` is for removing the deployment and optionally decommissioning supporting resources
+- `recreate.sh` preserves the static IP, managed certificate, DNS record, Artifact Registry repository, and local env file
+- `teardown.sh` removes the managed certificate and static IP by default, and can also delete the cluster, Artifact Registry repository, DNS record, env file, and rendered manifests
+- `recreate.sh` requires `--yes` because it is intentionally destructive to the running cluster but is not meant to fully decommission the public entrypoint
+
+### 3.2 Generic Kubernetes path
+
 Copy the Kubernetes environment template:
 
 ```bash
@@ -57,8 +302,8 @@ cp k8s/k8s.env.example k8s/k8s.env
 Edit `k8s/k8s.env` and set at least:
 
 - `K8S_HOST`: ingress hostname presented to browsers and WebSocket clients
-- `K8S_INGRESS_CLASS_NAME`: ingress class used by your cluster
-- `K8S_TLS_SECRET_NAME`: TLS secret name referenced by the Ingress objects
+- `K8S_INGRESS_CLASS_NAME`: ingress class used by your cluster when `K8S_EXPOSURE_MODE=ingress-nginx`
+- `K8S_TLS_SECRET_NAME`: TLS secret name referenced by the Ingress objects when `K8S_EXPOSURE_MODE=ingress-nginx`
 - `K8S_IMAGE_REGISTRY`: target registry prefix, for example `ghcr.io/your-org`
 - `K8S_IMAGE_TAG`: deployment tag, for example `2026-03-17`
 - `GOOGLE_OAUTH_CLIENT_ID`: Google OAuth web client ID
@@ -73,8 +318,9 @@ Storage settings:
 
 TLS options:
 
-- For quick local or non-production setup, use `./scripts/k8s/create-self-signed-tls.sh`.
-- For real environments, create `K8S_TLS_SECRET_NAME` with your own certificate flow before deployment.
+- For `ingress-nginx`, use `./scripts/k8s/create-self-signed-tls.sh` for quick local or non-production setup.
+- For `ingress-nginx` in real environments, create `K8S_TLS_SECRET_NAME` with your own certificate flow before deployment.
+- For `gke-gateway`, the GKE bootstrap script uses a Google-managed SSL certificate instead of a Kubernetes TLS secret.
 
 Fast rebuild path:
 
@@ -206,15 +452,45 @@ Then open:
 ### 7.1 Core cluster settings
 
 - `K8S_NAMESPACE`: namespace created and managed by the deployment scripts
-- `K8S_HOST`: hostname routed by the Ingress resources
-- `K8S_INGRESS_CLASS_NAME`: ingress class name, for example `nginx`
-- `K8S_TLS_SECRET_NAME`: secret referenced by all Ingress resources
+- `K8S_HOST`: hostname routed by the Ingress or Gateway resources
+- `K8S_EXPOSURE_MODE`: `ingress-nginx` or `gke-gateway`
+- `K8S_INGRESS_CLASS_NAME`: ingress class name, for example `nginx`, used by `ingress-nginx`
+- `K8S_TLS_SECRET_NAME`: TLS secret referenced by `ingress-nginx`
+- `K8S_GKE_GATEWAY_NAME`: Gateway resource name used by `gke-gateway`
+- `K8S_GKE_GATEWAY_CLASS`: GKE GatewayClass, usually `gke-l7-global-external-managed`
+- `K8S_GKE_GATEWAY_ADDRESS_NAME`: reserved global static IP name used by the Gateway
+- `K8S_GKE_GATEWAY_SSL_CERTIFICATE_NAME`: Google-managed SSL certificate resource name
+- `K8S_GKE_GATEWAY_BACKEND_TIMEOUT_SEC`: backend timeout applied to broker and backoffice through `GCPBackendPolicy`
 
 ### 7.2 Images
 
 - `K8S_IMAGE_REGISTRY`: registry prefix used to compute the three app image names
 - `K8S_IMAGE_TAG`: tag shared by frontend, broker, and backoffice
 - `K8S_PUSH_IMAGES`: when `true`, `build-images.sh` pushes after each build
+
+GKE bootstrap-specific inputs:
+
+- `GCP_PROJECT_ID`
+- `GCP_PROJECT_NAME`
+- `GCP_BILLING_ACCOUNT`
+- `GCP_PROJECT_ORGANIZATION_ID`
+- `GCP_PROJECT_FOLDER_ID`
+- `GCP_REGION`
+- `GCP_DNS_MANAGED_ZONE`
+- `GKE_CLUSTER_NAME`
+- `GKE_CLUSTER_LOCATION`
+- `GKE_MACHINE_TYPE`
+- `GKE_NODE_COUNT`
+- `GKE_RELEASE_CHANNEL`
+- `GKE_ARTIFACT_REPOSITORY`
+
+These values can also be overridden directly on the `gke/bootstrap.sh`
+command line with:
+
+- `--cluster-location`
+- `--machine-type`
+- `--node-count`
+- `--release-channel`
 
 Computed images:
 
@@ -300,6 +576,12 @@ Run the full teardown companion:
 
 ```bash
 ./scripts/k8s/teardown.sh
+```
+
+For GKE-managed public resources, use the companion instead:
+
+```bash
+./scripts/gke/teardown.sh
 ```
 
 Useful teardown flags:

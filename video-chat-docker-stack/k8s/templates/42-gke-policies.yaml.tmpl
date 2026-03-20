@@ -1,0 +1,95 @@
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: frontend
+  namespace: ${K8S_NAMESPACE}
+spec:
+  default:
+    checkIntervalSec: 15
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 2
+    config:
+      type: HTTP
+      httpHealthCheck:
+        portSpecification: USE_FIXED_PORT
+        port: 80
+        requestPath: /
+  targetRef:
+    group: ""
+    kind: Service
+    name: frontend
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: broker
+  namespace: ${K8S_NAMESPACE}
+spec:
+  default:
+    checkIntervalSec: 15
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 2
+    config:
+      type: HTTP
+      httpHealthCheck:
+        portSpecification: USE_FIXED_PORT
+        port: 9898
+        requestPath: /actuator/health
+  targetRef:
+    group: ""
+    kind: Service
+    name: broker
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: backoffice
+  namespace: ${K8S_NAMESPACE}
+spec:
+  default:
+    checkIntervalSec: 15
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 2
+    config:
+      type: HTTP
+      httpHealthCheck:
+        portSpecification: USE_FIXED_PORT
+        port: 7901
+        requestPath: /actuator/health
+  targetRef:
+    group: ""
+    kind: Service
+    name: backoffice
+---
+apiVersion: networking.gke.io/v1
+kind: GCPBackendPolicy
+metadata:
+  name: broker
+  namespace: ${K8S_NAMESPACE}
+spec:
+  default:
+    timeoutSec: ${K8S_GKE_GATEWAY_BACKEND_TIMEOUT_SEC}
+    connectionDraining:
+      drainingTimeoutSec: 60
+  targetRef:
+    group: ""
+    kind: Service
+    name: broker
+---
+apiVersion: networking.gke.io/v1
+kind: GCPBackendPolicy
+metadata:
+  name: backoffice
+  namespace: ${K8S_NAMESPACE}
+spec:
+  default:
+    timeoutSec: ${K8S_GKE_GATEWAY_BACKEND_TIMEOUT_SEC}
+    connectionDraining:
+      drainingTimeoutSec: 60
+  targetRef:
+    group: ""
+    kind: Service
+    name: backoffice

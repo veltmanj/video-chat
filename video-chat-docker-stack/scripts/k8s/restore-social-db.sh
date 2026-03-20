@@ -7,6 +7,39 @@ source "${SCRIPT_DIR}/common.sh"
 
 require_command kubectl
 
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/k8s/restore-social-db.sh [options] <dump-file> [k8s-env-file]
+
+Restore a PostgreSQL dump into the social-db pod.
+
+Options:
+  --verbose       Show narrated step-by-step output (default)
+  --quiet         Reduce output to command errors and the final summary
+  --help          Show this help text
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --verbose)
+      set_log_level verbose
+      shift
+      ;;
+    --quiet)
+      set_log_level quiet
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
 load_k8s_env "${2:-${ENV_FILE_DEFAULT}}"
 
 dump_file="${1:-}"
@@ -15,6 +48,10 @@ dump_file="${1:-}"
 
 pod_name="$(resolve_social_db_pod)"
 [[ -n "${pod_name}" ]] || fail "Could not find the social-db pod in namespace ${K8S_NAMESPACE}."
+
+log_step "Restoring social-db backup"
+log_info "Pod: ${pod_name}"
+log_info "Dump file: ${dump_file}"
 
 kubectl exec --namespace "${K8S_NAMESPACE}" -i "${pod_name}" -- sh -lc '
   export PGPASSWORD="$POSTGRES_PASSWORD"

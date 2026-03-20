@@ -32,7 +32,7 @@ spec:
       containers:
         - name: broker
           image: ${BROKER_IMAGE}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 9898
               name: http
@@ -86,4 +86,3 @@ spec:
               port: 9898
             initialDelaySeconds: 40
             periodSeconds: 20
-
