@@ -4,17 +4,26 @@
       <img src="assets/pulseroom-mark.svg" alt="PulseRoom">
       <span>PulseRoom</span>
     </a>
-    <a
-      class="profile-link"
-      routerLink="/social"
-      routerLinkActive="active"
-      aria-label="Open social profile"
-      [attr.title]="profileName">
-      <img *ngIf="profileImageUrl; else profileFallback" [src]="profileImageUrl" [alt]="profileName" (error)="onProfileImageError()">
-      <ng-template #profileFallback>
-        <span>{{ profileInitials }}</span>
-      </ng-template>
-    </a>
+    <div class="profile-actions">
+      <a
+        class="profile-link"
+        routerLink="/social"
+        routerLinkActive="active"
+        aria-label="Open social profile"
+        [attr.title]="profileName"
+        (click)="closeProfileMenu()"
+        (contextmenu)="openProfileMenu($event)">
+        <img *ngIf="profileImageUrl; else profileFallback" [src]="profileImageUrl" [alt]="profileName" (error)="onProfileImageError()">
+        <ng-template #profileFallback>
+          <span>{{ profileInitials }}</span>
+        </ng-template>
+      </a>
+      <div class="profile-menu" *ngIf="profileMenuOpen" role="menu" aria-label="Profile actions">
+        <button type="button" class="profile-menu-item" role="menuitem" (click)="logout()">
+          Logout
+        </button>
+      </div>
+    </div>
   </header>
   <router-outlet></router-outlet>
 </div>

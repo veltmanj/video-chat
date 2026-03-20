@@ -12,6 +12,7 @@ import { CameraFeed } from '../../core/models/room.models';
 export class CameraGridComponent implements AfterViewChecked {
   @Input() feeds: CameraFeed[] = [];
   @Output() removeFeed = new EventEmitter<string>();
+  @Output() toggleFeedAudio = new EventEmitter<string>();
 
   @ViewChildren('feedVideo') private videoElements!: QueryList<ElementRef<HTMLVideoElement>>;
 
@@ -25,6 +26,22 @@ export class CameraGridComponent implements AfterViewChecked {
 
   getOfflineAvatarAlt(feed: CameraFeed): string {
     return `${feed.ownerName} profielafbeelding`;
+  }
+
+  isVideoMuted(feed: CameraFeed): boolean {
+    return feed.local || feed.muted;
+  }
+
+  hasAudioControl(feed: CameraFeed): boolean {
+    return !!feed.stream && (feed.local || this.getAudioTracks(feed.stream).length > 0);
+  }
+
+  getAudioButtonLabel(feed: CameraFeed): string {
+    if (feed.local) {
+      return feed.audioEnabled ? 'Mute mic' : 'Unmute mic';
+    }
+
+    return feed.muted ? 'Unmute' : 'Mute';
   }
 
   ngAfterViewChecked(): void {
@@ -55,5 +72,13 @@ export class CameraGridComponent implements AfterViewChecked {
         }
       }
     });
+  }
+
+  private getAudioTracks(stream: MediaStream): MediaStreamTrack[] {
+    if (typeof stream.getAudioTracks !== 'function') {
+      return [];
+    }
+
+    return stream.getAudioTracks();
   }
 }

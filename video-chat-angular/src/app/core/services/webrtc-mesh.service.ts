@@ -241,9 +241,11 @@ export class WebrtcMeshService {
         return;
       }
 
+      const resolvedStream = event.streams[0] ?? new MediaStream([event.track]);
+
       // Browsers can fire ontrack before the track becomes unmuted, so reuse the same publish step
       // on both callbacks to avoid missing a remote tile on slower negotiations.
-      const publishRemoteFeed = () => this.publishRemoteTrack(remoteClientId, event.track);
+      const publishRemoteFeed = () => this.publishRemoteTrack(remoteClientId, event.track, resolvedStream);
 
       publishRemoteFeed();
       event.track.onunmute = () => {
@@ -428,13 +430,15 @@ export class WebrtcMeshService {
   /**
    * Converts a browser track callback into the UI feed shape consumed by RoomSessionService.
    */
-  private publishRemoteTrack(remoteClientId: string, track: MediaStreamTrack): void {
+  private publishRemoteTrack(remoteClientId: string, track: MediaStreamTrack, stream?: MediaStream): void {
     if (!this.remoteFeedUpserter) {
       return;
     }
 
     const remoteName = this.peerNames.get(remoteClientId) || 'Remote guest';
-    const resolvedStream = new MediaStream([track]);
+    const resolvedStream = stream && stream.getVideoTracks().length > 0
+      ? stream
+      : new MediaStream([track]);
     this.remoteFeedUpserter({
       id: `remote-${remoteClientId}-${track.id}`,
       ownerId: remoteClientId,
@@ -443,7 +447,8 @@ export class WebrtcMeshService {
       label: `${remoteName} camera`,
       stream: resolvedStream,
       local: false,
-      muted: true,
+      muted: false,
+      audioEnabled: true,
       online: true
     });
   }

@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Component, HostListener } from '@angular/core';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from './core/services/auth.service';
 
 @Component({
@@ -12,8 +12,9 @@ import { AuthService } from './core/services/auth.service';
 })
 export class AppComponent {
   private failedProfileImageUrl: string | null = null;
+  profileMenuOpen = false;
 
-  constructor(public auth: AuthService) { }
+  constructor(public auth: AuthService, private router: Router) { }
 
   get profileImageUrl(): string | null {
     const currentUrl = this.auth.profileImageUrl;
@@ -46,5 +47,39 @@ export class AppComponent {
 
   onProfileImageError(): void {
     this.failedProfileImageUrl = this.auth.profileImageUrl;
+  }
+
+  openProfileMenu(event: MouseEvent): void {
+    event.preventDefault();
+    this.profileMenuOpen = true;
+  }
+
+  closeProfileMenu(): void {
+    this.profileMenuOpen = false;
+  }
+
+  logout(): void {
+    this.closeProfileMenu();
+    this.failedProfileImageUrl = null;
+    this.auth.logout();
+    void this.router.navigateByUrl('/login');
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (!this.profileMenuOpen || this.isWithinProfileActions(event.target)) {
+      return;
+    }
+
+    this.closeProfileMenu();
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    this.closeProfileMenu();
+  }
+
+  private isWithinProfileActions(target: EventTarget | null): boolean {
+    return target instanceof Element && !!target.closest('.profile-actions');
   }
 }

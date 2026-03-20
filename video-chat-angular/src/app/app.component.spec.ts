@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
+import { vi } from 'vitest';
 import { appRoutes } from './app.routes';
 import { AppComponent } from './app.component';
 import { AuthService } from './core/services/auth.service';
@@ -15,7 +16,8 @@ describe('AppComponent', () => {
           useValue: {
             isAuthenticated: false,
             profileImageUrl: null,
-            profileName: null
+            profileName: null,
+            logout: vi.fn()
           }
         }
       ]
@@ -40,7 +42,8 @@ describe('AppComponent', () => {
           useValue: {
             isAuthenticated: true,
             profileImageUrl: 'https://example.com/avatar.png',
-            profileName: 'Operator Name'
+            profileName: 'Operator Name',
+            logout: vi.fn()
           }
         }
       ]
@@ -51,10 +54,89 @@ describe('AppComponent', () => {
 
     const profileLink = fixture.nativeElement.querySelector('.profile-link') as HTMLAnchorElement | null;
     const profileImage = fixture.nativeElement.querySelector('.profile-link img') as HTMLImageElement | null;
+    const profileMenu = fixture.nativeElement.querySelector('.profile-menu') as HTMLDivElement | null;
 
     expect(profileLink).not.toBeNull();
     expect(profileLink?.getAttribute('href')).toBe('/social');
     expect(profileImage?.getAttribute('src')).toBe('https://example.com/avatar.png');
+    expect(profileMenu).toBeNull();
+  });
+
+  it('opens the profile menu on right click and logs out from the menu', async () => {
+    TestBed.resetTestingModule();
+
+    const logoutSpy = vi.fn();
+
+    await TestBed.configureTestingModule({
+      imports: [AppComponent],
+      providers: [
+        provideRouter(appRoutes),
+        {
+          provide: AuthService,
+          useValue: {
+            isAuthenticated: true,
+            profileImageUrl: 'https://example.com/avatar.png',
+            profileName: 'Operator Name',
+            logout: logoutSpy
+          }
+        }
+      ]
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(AppComponent);
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    fixture.detectChanges();
+
+    const profileLink = fixture.nativeElement.querySelector('.profile-link') as HTMLAnchorElement;
+    const contextMenuEvent = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+    const preventDefaultSpy = vi.spyOn(contextMenuEvent, 'preventDefault');
+
+    profileLink.dispatchEvent(contextMenuEvent);
+    fixture.detectChanges();
+
+    const logoutButton = fixture.nativeElement.querySelector('.profile-menu-item') as HTMLButtonElement;
+    expect(preventDefaultSpy).toHaveBeenCalled();
+    expect(logoutButton.textContent?.trim()).toBe('Logout');
+
+    logoutButton.click();
+
+    expect(logoutSpy).toHaveBeenCalled();
+    expect(navigateSpy).toHaveBeenCalledWith('/login');
+  });
+
+  it('closes the profile menu when clicking outside the profile area', async () => {
+    TestBed.resetTestingModule();
+
+    await TestBed.configureTestingModule({
+      imports: [AppComponent],
+      providers: [
+        provideRouter(appRoutes),
+        {
+          provide: AuthService,
+          useValue: {
+            isAuthenticated: true,
+            profileImageUrl: 'https://example.com/avatar.png',
+            profileName: 'Operator Name',
+            logout: vi.fn()
+          }
+        }
+      ]
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    const profileLink = fixture.nativeElement.querySelector('.profile-link') as HTMLAnchorElement;
+    profileLink.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.profile-menu')).not.toBeNull();
+
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.profile-menu')).toBeNull();
   });
 
   it('falls back to initials when the profile image fails to load', async () => {
@@ -69,7 +151,8 @@ describe('AppComponent', () => {
           useValue: {
             isAuthenticated: true,
             profileImageUrl: 'https://example.com/avatar.png',
-            profileName: 'Operator Name'
+            profileName: 'Operator Name',
+            logout: vi.fn()
           }
         }
       ]

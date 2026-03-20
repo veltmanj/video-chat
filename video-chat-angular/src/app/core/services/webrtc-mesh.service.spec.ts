@@ -149,4 +149,30 @@ describe('WebrtcMeshService', () => {
     expect(peer.getSenders()).toHaveLength(1);
     expect((peer.getSenders()[0] as unknown as MockSender).track).toBe(track3);
   });
+
+  it('publishes remote video feeds with audio enabled when a shared media stream arrives', async () => {
+    const remoteFeedUpserter = vi.fn();
+    const service = new WebrtcMeshService();
+    service.initialize(identity, () => undefined, remoteFeedUpserter, () => undefined, () => undefined);
+
+    await service.onPeerJoined('client-remote', 'Remote');
+
+    const peer = MockRTCPeerConnection.instances[0];
+    const videoTrack = { id: 'track-video', kind: 'video', onended: null, onunmute: null } as unknown as MediaStreamTrack;
+    const sharedStream = {
+      getVideoTracks: () => [videoTrack],
+      getTracks: () => [videoTrack]
+    } as unknown as MediaStream;
+
+    peer.ontrack?.({
+      track: videoTrack,
+      streams: [sharedStream]
+    } as unknown as RTCTrackEvent);
+
+    expect(remoteFeedUpserter).toHaveBeenCalledWith(expect.objectContaining({
+      stream: sharedStream,
+      muted: false,
+      audioEnabled: true
+    }));
+  });
 });

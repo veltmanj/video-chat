@@ -17,6 +17,7 @@ describe('RoomSessionService', () => {
       label: 'Cam 1',
       local: true,
       muted: true,
+      audioEnabled: true,
       online: true
     };
 
@@ -102,7 +103,8 @@ describe('RoomSessionService', () => {
       label: 'Remote fallback label',
       stream: {} as MediaStream,
       local: false,
-      muted: true,
+      muted: false,
+      audioEnabled: true,
       online: true
     });
 
@@ -157,7 +159,8 @@ describe('RoomSessionService', () => {
       label: 'Remote camera',
       stream: {} as MediaStream,
       local: false,
-      muted: true,
+      muted: false,
+      audioEnabled: true,
       online: true
     });
 
@@ -185,7 +188,8 @@ describe('RoomSessionService', () => {
       label: 'Remote fallback label',
       stream: {} as MediaStream,
       local: false,
-      muted: true,
+      muted: false,
+      audioEnabled: true,
       online: true
     });
 
@@ -239,7 +243,8 @@ describe('RoomSessionService', () => {
       label: 'Remote fallback label',
       stream: {} as MediaStream,
       local: false,
-      muted: true,
+      muted: false,
+      audioEnabled: true,
       online: true
     });
 
@@ -251,7 +256,8 @@ describe('RoomSessionService', () => {
       label: 'Remote fallback label',
       stream: {} as MediaStream,
       local: false,
-      muted: true,
+      muted: false,
+      audioEnabled: true,
       online: true
     });
 
@@ -267,6 +273,51 @@ describe('RoomSessionService', () => {
       trackId: 'track-2',
       stream: expect.any(Object),
       online: true
+    }));
+  });
+
+  it('defaults remote published feeds to audio enabled', () => {
+    service.consumeRoomEvent({
+      type: 'CAMERA_PUBLISHED',
+      roomId: 'room-1',
+      senderId: 'remote-1',
+      senderName: 'Remote',
+      sentAt: new Date().toISOString(),
+      payload: {
+        feedId: 'feed-remote-1',
+        label: 'Remote camera'
+      }
+    }, 'local-1');
+
+    let feedsSnapshot: CameraFeed[] = [];
+    service.feeds$.subscribe((feeds) => (feedsSnapshot = feeds)).unsubscribe();
+
+    expect(feedsSnapshot[0]).toEqual(expect.objectContaining({
+      muted: false,
+      audioEnabled: true
+    }));
+  });
+
+  it('updates a feed state explicitly', () => {
+    service.addLocalFeed({
+      id: 'feed-1',
+      ownerId: 'owner-1',
+      ownerName: 'Owner 1',
+      label: 'Cam 1',
+      local: true,
+      muted: true,
+      audioEnabled: true,
+      online: true
+    });
+
+    service.updateFeed('feed-1', { audioEnabled: false });
+
+    let feedsSnapshot: CameraFeed[] = [];
+    service.feeds$.subscribe((feeds) => (feedsSnapshot = feeds)).unsubscribe();
+
+    expect(feedsSnapshot[0]).toEqual(expect.objectContaining({
+      id: 'feed-1',
+      audioEnabled: false
     }));
   });
 
@@ -314,7 +365,8 @@ describe('RoomSessionService', () => {
       label: 'Remote fallback label',
       stream: {} as MediaStream,
       local: false,
-      muted: true,
+      muted: false,
+      audioEnabled: true,
       online: true
     });
 

@@ -102,10 +102,12 @@ video {
 
 .tile-footer {
   padding: 0.75rem;
+  display: flex;
+  gap: 0.65rem;
 }
 
 .tile-footer button {
-  width: 100%;
+  flex: 1 1 0;
   border: none;
   border-radius: 10px;
   padding: 0.55rem;
@@ -113,6 +115,12 @@ video {
   font-weight: 600;
   background: linear-gradient(120deg, #f97316, #ef4444);
   cursor: pointer;
+}
+
+.tile-footer .secondary {
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  color: #e2e8f0;
 }
 
 @keyframes pulse {

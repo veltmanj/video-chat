@@ -27,6 +27,7 @@ describe('CameraGridComponent', () => {
       stream,
       local: false,
       muted: true,
+      audioEnabled: false,
       online: true
     };
 
@@ -53,6 +54,7 @@ describe('CameraGridComponent', () => {
       label: 'Remote A camera',
       local: false,
       muted: true,
+      audioEnabled: false,
       online: false
     };
 
@@ -74,6 +76,7 @@ describe('CameraGridComponent', () => {
       label: 'FaceTime HD Camera',
       local: true,
       muted: true,
+      audioEnabled: true,
       online: true
     };
 
@@ -81,5 +84,30 @@ describe('CameraGridComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('FaceTime HD Camera');
+  });
+
+  it('emits tile audio toggle actions', () => {
+    const toggleSpy = vi.fn();
+    const stream = { getAudioTracks: () => [{ kind: 'audio' } as MediaStreamTrack] } as unknown as MediaStream;
+    const feed: CameraFeed = {
+      id: 'remote-a-track-1',
+      ownerId: 'remote-a',
+      ownerName: 'Remote A',
+      label: 'Remote A camera',
+      stream,
+      local: false,
+      muted: false,
+      audioEnabled: true,
+      online: true
+    };
+
+    component.toggleFeedAudio.subscribe(toggleSpy);
+    component.feeds = [feed];
+    fixture.detectChanges();
+
+    const audioButton = fixture.nativeElement.querySelector('.secondary') as HTMLButtonElement;
+    audioButton.click();
+
+    expect(toggleSpy).toHaveBeenCalledWith('remote-a-track-1');
   });
 });

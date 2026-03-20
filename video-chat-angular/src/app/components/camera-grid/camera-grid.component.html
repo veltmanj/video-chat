@@ -14,7 +14,7 @@
         *ngIf="feed.stream"
         autoplay
         playsinline
-        [muted]="feed.muted"
+        [muted]="isVideoMuted(feed)"
         [attr.data-feed-id]="feed.id">
       </video>
 
@@ -32,8 +32,15 @@
       </div>
     </div>
 
-    <footer class="tile-footer" *ngIf="feed.local">
-      <button type="button" (click)="removeFeed.emit(feed.id)">Stop camera</button>
+    <footer class="tile-footer" *ngIf="feed.local || hasAudioControl(feed)">
+      <button
+        class="secondary"
+        *ngIf="hasAudioControl(feed)"
+        type="button"
+        (click)="toggleFeedAudio.emit(feed.id)">
+        {{ getAudioButtonLabel(feed) }}
+      </button>
+      <button *ngIf="feed.local" type="button" (click)="removeFeed.emit(feed.id)">Stop camera</button>
     </footer>
   </article>
 </section>

@@ -35,7 +35,8 @@
     <app-camera-grid
       class="grid-zone"
       [feeds]="feeds"
-      (removeFeed)="removeCamera($event)">
+      (removeFeed)="removeCamera($event)"
+      (toggleFeedAudio)="toggleFeedAudio($event)">
     </app-camera-grid>
 
     <app-chat-panel

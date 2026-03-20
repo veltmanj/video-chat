@@ -54,14 +54,14 @@ export class MediaDeviceService {
    * Starts a camera stream for a specific device, with a relaxed fallback for virtual cameras that
    * reject ideal resolution or frame-rate constraints.
    */
-  async startCamera(deviceId: string): Promise<MediaStream> {
+  async startCamera(deviceId: string, includeAudio = true): Promise<MediaStream> {
     const mediaDevices = navigator.mediaDevices;
     if (!mediaDevices?.getUserMedia) {
       throw new Error('Deze browser ondersteunt geen mediaDevices API.');
     }
 
     try {
-      return await mediaDevices.getUserMedia(this.buildPreferredVideoConstraints(deviceId));
+      return await mediaDevices.getUserMedia(this.buildPreferredVideoConstraints(deviceId, includeAudio));
     } catch (error: any) {
       const retryable = error && (error.name === 'OverconstrainedError' || error.name === 'NotReadableError');
       if (!retryable) {
@@ -69,7 +69,7 @@ export class MediaDeviceService {
       }
 
       // Virtual cams may reject strict frame-size/fps constraints. Retry with minimal constraints.
-      return mediaDevices.getUserMedia(this.buildFallbackVideoConstraints(deviceId));
+      return mediaDevices.getUserMedia(this.buildFallbackVideoConstraints(deviceId, includeAudio));
     }
   }
 
@@ -122,9 +122,9 @@ export class MediaDeviceService {
   /**
    * Preferred constraints balance quality and compatibility for normal webcams.
    */
-  private buildPreferredVideoConstraints(deviceId: string): MediaStreamConstraints {
+  private buildPreferredVideoConstraints(deviceId: string, includeAudio: boolean): MediaStreamConstraints {
     return {
-      audio: false,
+      audio: this.buildAudioConstraints(includeAudio),
       video: {
         deviceId: deviceId ? { exact: deviceId } : undefined,
         width: { ideal: 1280 },
@@ -138,10 +138,22 @@ export class MediaDeviceService {
    * Fallback constraints intentionally avoid resolution/fps preferences because some virtual devices
    * reject anything stricter than "give me the device".
    */
-  private buildFallbackVideoConstraints(deviceId: string): MediaStreamConstraints {
+  private buildFallbackVideoConstraints(deviceId: string, includeAudio: boolean): MediaStreamConstraints {
     return {
-      audio: false,
+      audio: this.buildAudioConstraints(includeAudio),
       video: deviceId ? { deviceId: { exact: deviceId } } : true
+    };
+  }
+
+  private buildAudioConstraints(includeAudio: boolean): boolean | MediaTrackConstraints {
+    if (!includeAudio) {
+      return false;
+    }
+
+    return {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true
     };
   }
 }

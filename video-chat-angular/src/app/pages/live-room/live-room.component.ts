@@ -318,7 +318,7 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
 
     this.isAddingCamera = true;
     try {
-      const stream = await this.mediaDeviceService.startCamera(device.deviceId);
+      const stream = await this.mediaDeviceService.startCamera(device.deviceId, !this.hasLocalAudioCapture());
       const feedId = this.roomSessionService.createId('feed');
 
       this.runInZone(() => {
@@ -368,6 +368,38 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
     }
 
     this.rsocketRoomService.publish('CAMERA_REMOVED', { feedId });
+  }
+
+  toggleFeedAudio(feedId: string): void {
+    const targetFeed = this.feeds.find((feed) => feed.id === feedId);
+    if (!targetFeed || !targetFeed.stream) {
+      return;
+    }
+
+    if (targetFeed.local) {
+      const audioTracks = targetFeed.stream.getAudioTracks();
+      if (!audioTracks.length) {
+        this.setError('Deze camera-feed heeft geen gekoppelde microfoon.');
+        return;
+      }
+
+      const nextAudioEnabled = !targetFeed.audioEnabled;
+      audioTracks.forEach((track) => {
+        track.enabled = nextAudioEnabled;
+      });
+      this.roomSessionService.updateFeed(feedId, { audioEnabled: nextAudioEnabled });
+      this.uiError = '';
+      this.uiInfo = nextAudioEnabled ? 'Microfoon ingeschakeld.' : 'Microfoon gedempt.';
+      return;
+    }
+
+    const nextMuted = !targetFeed.muted;
+    this.roomSessionService.updateFeed(feedId, {
+      muted: nextMuted,
+      audioEnabled: !nextMuted
+    });
+    this.uiError = '';
+    this.uiInfo = nextMuted ? `Audio gedempt voor ${targetFeed.ownerName}.` : `Audio ingeschakeld voor ${targetFeed.ownerName}.`;
   }
 
   /**
@@ -800,9 +832,14 @@ export class LiveRoomComponent implements OnInit, OnDestroy {
       label: device.label,
       local: true,
       muted: true,
+      audioEnabled: stream.getAudioTracks().some((track) => track.enabled),
       online: true,
       stream
     };
+  }
+
+  private hasLocalAudioCapture(): boolean {
+    return this.feeds.some((feed) => feed.local && !!feed.stream?.getAudioTracks().length);
   }
 
   /**

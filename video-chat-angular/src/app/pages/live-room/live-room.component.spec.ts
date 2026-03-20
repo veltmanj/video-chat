@@ -77,6 +77,7 @@ describe('LiveRoomComponent', () => {
     roomSessionService = {
       createId: vi.fn(),
       addLocalFeed: vi.fn(),
+      updateFeed: vi.fn(),
       removeFeed: vi.fn(),
       upsertRemoteFeed: vi.fn(),
       removeRemoteTrackFeed: vi.fn(),
@@ -121,7 +122,11 @@ describe('LiveRoomComponent', () => {
     aiAgentService.shouldReplyTo.mockImplementation((text: string) => text.trim().toLowerCase().startsWith('@pulse'));
     aiAgentService.stripMention.mockImplementation((text: string) => text.trim().replace(/^@pulse\s*/i, '').trim());
     aiAgentService.requestReply.mockReturnValue(new BehaviorSubject({ reply: 'AI summary', model: 'gpt-5-mini' }).asObservable());
-    mediaDeviceService.startCamera.mockResolvedValue({ id: 'stream-1', getTracks: () => [] } as any);
+    mediaDeviceService.startCamera.mockResolvedValue({
+      id: 'stream-1',
+      getTracks: () => [],
+      getAudioTracks: () => [{ enabled: true } as MediaStreamTrack]
+    } as any);
     rsocketRoomService.connect.mockResolvedValue(undefined);
     rsocketRoomService.publishWithAck.mockResolvedValue(true);
     webrtcMeshService.hasPeer.mockReturnValue(false);
@@ -244,7 +249,7 @@ describe('LiveRoomComponent', () => {
 
     await component.addCamera();
 
-    expect(mediaDeviceService.startCamera).toHaveBeenCalledWith('cam-1');
+    expect(mediaDeviceService.startCamera).toHaveBeenCalledWith('cam-1', true);
     expect(roomSessionService.addLocalFeed).toHaveBeenCalled();
     expect(webrtcMeshService.addLocalFeed).toHaveBeenCalled();
     expect(rsocketRoomService.publish).toHaveBeenCalledWith(
@@ -252,6 +257,51 @@ describe('LiveRoomComponent', () => {
       expect.objectContaining({ deviceId: 'cam-1', label: 'Camera 1' })
     );
     expect(mediaDeviceService.listVideoInputs).toHaveBeenCalledTimes(2);
+  });
+
+  it('toggles local microphone tracks from the camera tile action', () => {
+    const audioTrack = { enabled: true } as MediaStreamTrack;
+    component.feeds = [{
+      id: 'feed-1',
+      ownerId: 'local-1',
+      ownerName: 'Local',
+      label: 'Camera 1',
+      stream: {
+        getAudioTracks: () => [audioTrack]
+      } as MediaStream,
+      local: true,
+      muted: true,
+      audioEnabled: true,
+      online: true
+    }];
+
+    component.toggleFeedAudio('feed-1');
+
+    expect(audioTrack.enabled).toBe(false);
+    expect(roomSessionService.updateFeed).toHaveBeenCalledWith('feed-1', { audioEnabled: false });
+  });
+
+  it('toggles remote tile playback from the camera tile action', () => {
+    component.feeds = [{
+      id: 'feed-1',
+      ownerId: 'remote-1',
+      ownerName: 'Remote',
+      label: 'Camera 1',
+      stream: {
+        getAudioTracks: () => [{ enabled: true } as MediaStreamTrack]
+      } as MediaStream,
+      local: false,
+      muted: false,
+      audioEnabled: true,
+      online: true
+    }];
+
+    component.toggleFeedAudio('feed-1');
+
+    expect(roomSessionService.updateFeed).toHaveBeenCalledWith('feed-1', {
+      muted: true,
+      audioEnabled: false
+    });
   });
 
   it('initiates webrtc peer join when receiving CAMERA_PUBLISHED from another client', async () => {

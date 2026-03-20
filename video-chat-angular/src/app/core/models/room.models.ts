@@ -27,6 +27,7 @@ export interface CameraFeed {
   stream?: MediaStream;
   local: boolean;
   muted: boolean;
+  audioEnabled: boolean;
   online: boolean;
 }
 

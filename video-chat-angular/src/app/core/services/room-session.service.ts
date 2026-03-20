@@ -38,6 +38,19 @@ export class RoomSessionService {
     this.updateFeeds((feeds) => [...feeds, feed]);
   }
 
+  updateFeed(feedId: string, patch: Partial<CameraFeed>): void {
+    this.updateFeeds((feeds) => feeds.map((feed) => {
+      if (feed.id !== feedId) {
+        return feed;
+      }
+
+      return {
+        ...feed,
+        ...patch
+      };
+    }));
+  }
+
   /**
    * Removes a feed by id and returns it so the caller can stop any attached media stream if needed.
    */
@@ -68,19 +81,29 @@ export class RoomSessionService {
           : -1;
 
         if (placeholderIndex !== -1) {
+          const currentFeed = nextFeeds[placeholderIndex];
           nextFeeds[placeholderIndex] = {
-            ...nextFeeds[placeholderIndex],
+            ...currentFeed,
             ...feed,
-            id: nextFeeds[placeholderIndex].id,
-            publishedFeedId: nextFeeds[placeholderIndex].publishedFeedId ?? feed.publishedFeedId,
-            label: nextFeeds[placeholderIndex].label || feed.label,
+            id: currentFeed.id,
+            publishedFeedId: currentFeed.publishedFeedId ?? feed.publishedFeedId,
+            label: currentFeed.label || feed.label,
+            muted: currentFeed.muted,
+            audioEnabled: currentFeed.audioEnabled,
             online: true
           };
         } else {
           nextFeeds.push(feed);
         }
       } else {
-        nextFeeds[index] = feed;
+        const currentFeed = nextFeeds[index];
+        nextFeeds[index] = feed.local
+          ? feed
+          : {
+              ...feed,
+              muted: currentFeed.muted,
+              audioEnabled: currentFeed.audioEnabled
+            };
       }
 
       return nextFeeds;
@@ -170,7 +193,8 @@ export class RoomSessionService {
         publishedFeedId: cameraPublishedPayload.feedId,
         label: cameraPublishedPayload.label || `${event.senderName} camera`,
         local: false,
-        muted: true,
+        muted: false,
+        audioEnabled: true,
         online: true
       });
       return;
