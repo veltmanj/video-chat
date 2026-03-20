@@ -774,17 +774,17 @@ delete_namespace_if_requested
 
 if [[ "${SKIP_BUILD}" != "true" ]]; then
   log_step "Building and pushing application images"
-  run_with_log_mode "${K8S_SCRIPT_DIR}/build-images.sh" "${ENV_FILE}"
+  run_with_log_mode "${K8S_SCRIPT_DIR}/build-images.sh" --env "${ENV_FILE}" "--${LOG_LEVEL}"
 else
   log_step "Skipping image build"
   log_info "Reusing configured image tag ${K8S_IMAGE_TAG}."
 fi
 
 log_step "Validating rendered manifests"
-run_with_log_mode "${K8S_SCRIPT_DIR}/validate.sh" "${ENV_FILE}"
+run_with_log_mode "${K8S_SCRIPT_DIR}/validate.sh" --env "${ENV_FILE}" "--${LOG_LEVEL}"
 
 log_step "Applying Kubernetes manifests"
-run_with_log_mode "${K8S_SCRIPT_DIR}/apply.sh" "${ENV_FILE}"
+run_with_log_mode "${K8S_SCRIPT_DIR}/apply.sh" --env "${ENV_FILE}" "--${LOG_LEVEL}"
 
 log_step "Waiting for Gateway address propagation"
 wait_for_gateway_address
