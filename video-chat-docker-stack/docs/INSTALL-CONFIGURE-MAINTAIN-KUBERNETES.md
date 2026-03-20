@@ -252,6 +252,70 @@ Notes:
 - The Google-managed certificate may stay in `PROVISIONING` until the DNS A record for `K8S_HOST` points at the reserved static IP.
 - This stack currently uses a Promtail `DaemonSet` with `hostPath` mounts, so a Standard GKE cluster is the intended target, not Autopilot.
 
+To inspect the managed certificate after bootstrap:
+
+```bash
+./scripts/gke/check-certificate.sh
+```
+
+That script prints:
+
+- the overall managed certificate status
+- the per-domain status for `K8S_HOST`
+- the reserved static IP
+- the currently resolved public IPv4 addresses for `K8S_HOST`
+
+If you want it to wait until the certificate is ready:
+
+```bash
+./scripts/gke/check-certificate.sh --wait
+```
+
+Useful flags:
+
+- `--timeout <seconds>`
+- `--interval <seconds>`
+- `--env <path>`
+
+To check whether the public endpoint is actually reachable for end users:
+
+```bash
+./scripts/gke/check-public-endpoint.sh
+```
+
+To wait until HTTPS is genuinely serving:
+
+```bash
+./scripts/gke/check-public-endpoint.sh --wait
+```
+
+That script combines:
+
+- managed certificate state
+- DNS-to-static-IP matching
+- HTTP redirect behavior
+- HTTPS reachability
+
+If the managed certificate appears stuck and you want to recreate just that
+resource without rebuilding the cluster:
+
+```bash
+./scripts/gke/recreate-certificate.sh --yes
+```
+
+Because Google Cloud does not allow deletion of a certificate resource while it
+is attached to the live HTTPS proxy, that script rotates to a newly created
+certificate name, patches the Gateway to use it, updates `k8s/k8s.env`, and
+then removes the old certificate once it is no longer in use.
+
+Useful recreate-certificate flags:
+
+- `--wait`
+- `--timeout <seconds>`
+- `--interval <seconds>`
+- `--env <path>`
+- `--name <value>`
+
 To remove the deployed namespace plus the public GKE-side resources again:
 
 ```bash

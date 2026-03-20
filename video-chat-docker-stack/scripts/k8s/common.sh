@@ -55,6 +55,32 @@ run_with_log_mode() {
   "$@"
 }
 
+# Retry transient external-command failures such as registry/network timeouts.
+retry_with_backoff() {
+  local attempts="$1"
+  local sleep_seconds="$2"
+  local description="$3"
+  local attempt=1
+  local exit_code=0
+  shift 3
+
+  while true; do
+    if "$@"; then
+      return 0
+    else
+      exit_code=$?
+    fi
+
+    if (( attempt >= attempts )); then
+      return "${exit_code}"
+    fi
+
+    log_info "${description} failed on attempt ${attempt}/${attempts}; retrying in ${sleep_seconds}s."
+    sleep "${sleep_seconds}"
+    attempt=$((attempt + 1))
+  done
+}
+
 # Validate external tooling as early as possible so later failures are not cryptic.
 require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"

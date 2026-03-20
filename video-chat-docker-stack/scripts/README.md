@@ -22,6 +22,7 @@ The grouped scripts follow a few rules that make the shell automation easier to 
 - `k8s/rendered/` is treated as disposable output. `render.sh` recreates it from scratch so `validate.sh`, `apply.sh`, and `delete.sh` all act on the same manifest bundle.
 - Top-level scripts are compatibility wrappers only. The real implementation lives in the grouped subdirectory with the same responsibility.
 - GKE scripts layer on top of the Kubernetes bundle. They provision cloud resources first, then call the Kubernetes scripts for image build, render, validate, apply, or teardown.
+- Standalone entrypoint scripts support `-h` and `--help` to print a short description and their accepted arguments.
 
 ## Typical Entrypoints
 
@@ -32,6 +33,9 @@ The most relevant scripts for day-to-day operations are:
 - `./scripts/gke/bootstrap.sh`: provision GCP/GKE prerequisites and deploy the stack
 - `./scripts/gke/recreate.sh`: replace the GKE cluster while preserving the reusable edge resources
 - `./scripts/gke/deploy-frontend.sh`: rebuild and roll out only the frontend image
+- `./scripts/gke/check-certificate.sh`: inspect or wait for the Google-managed certificate status
+- `./scripts/gke/check-public-endpoint.sh`: inspect or wait for real public HTTPS reachability
+- `./scripts/gke/recreate-certificate.sh`: recreate the managed certificate resource in place
 - `./scripts/gke/access-grafana.sh`: open a private local port-forward to Grafana
 - `./scripts/gke/show-expenses.sh`: report actual GCP spend from the billing export
 - `./scripts/gke/teardown.sh`: remove the GKE deployment and optional cloud resources

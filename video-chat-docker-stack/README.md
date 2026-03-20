@@ -43,6 +43,40 @@ To access the private Grafana instance safely over `kubectl port-forward`:
 ./scripts/gke/access-grafana.sh
 ```
 
+To check whether the Google-managed certificate has finished provisioning:
+
+```bash
+./scripts/gke/check-certificate.sh
+```
+
+To check whether the public site is actually reachable over HTTPS:
+
+```bash
+./scripts/gke/check-public-endpoint.sh
+```
+
+To wait until end users can reach the public HTTPS endpoint:
+
+```bash
+./scripts/gke/check-public-endpoint.sh --wait
+```
+
+To wait until it becomes active:
+
+```bash
+./scripts/gke/check-certificate.sh --wait
+```
+
+If the managed certificate gets stuck and you need to recreate just that
+resource while keeping the same Gateway/IP wiring:
+
+```bash
+./scripts/gke/recreate-certificate.sh --yes
+```
+
+That rotates the Gateway onto a newly created managed certificate name, updates
+`k8s/k8s.env`, and then removes the old certificate after GCP releases it.
+
 To report actual spend so far for the GKE project, backed by Cloud Billing
 export to BigQuery:
 

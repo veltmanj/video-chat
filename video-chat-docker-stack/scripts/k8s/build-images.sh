@@ -54,6 +54,8 @@ done
 load_k8s_env "${ENV_FILE}"
 
 BUILD_PLATFORM="${K8S_BUILD_PLATFORM:-linux/amd64}"
+PUSH_RETRY_ATTEMPTS="${K8S_PUSH_RETRY_ATTEMPTS:-4}"
+PUSH_RETRY_DELAY_SEC="${K8S_PUSH_RETRY_DELAY_SEC:-10}"
 
 log_step "Building application images"
 log_info "Build platform: ${BUILD_PLATFORM}"
@@ -70,12 +72,19 @@ run_with_log_mode docker build --platform "${BUILD_PLATFORM}" -t "${BACKOFFICE_I
 # daemon, while GKE requires registry-backed images.
 if [[ "${K8S_PUSH_IMAGES:-false}" == "true" ]]; then
   log_step "Pushing application images"
+  log_info "Retry policy: ${PUSH_RETRY_ATTEMPTS} attempts with ${PUSH_RETRY_DELAY_SEC}s backoff"
   log_info "Pushing frontend image"
-  run_with_log_mode docker push "${FRONTEND_IMAGE}"
+  retry_with_backoff "${PUSH_RETRY_ATTEMPTS}" "${PUSH_RETRY_DELAY_SEC}" \
+    "frontend image push" \
+    run_with_log_mode docker push "${FRONTEND_IMAGE}"
   log_info "Pushing broker image"
-  run_with_log_mode docker push "${BROKER_IMAGE}"
+  retry_with_backoff "${PUSH_RETRY_ATTEMPTS}" "${PUSH_RETRY_DELAY_SEC}" \
+    "broker image push" \
+    run_with_log_mode docker push "${BROKER_IMAGE}"
   log_info "Pushing backoffice image"
-  run_with_log_mode docker push "${BACKOFFICE_IMAGE}"
+  retry_with_backoff "${PUSH_RETRY_ATTEMPTS}" "${PUSH_RETRY_DELAY_SEC}" \
+    "backoffice image push" \
+    run_with_log_mode docker push "${BACKOFFICE_IMAGE}"
 else
   log_skip "image push because K8S_PUSH_IMAGES is not true."
 fi
