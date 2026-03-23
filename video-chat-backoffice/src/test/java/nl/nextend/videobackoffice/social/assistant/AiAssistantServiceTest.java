@@ -1,8 +1,8 @@
-package nl.nextend.videobackoffice.social;
+package nl.nextend.videobackoffice.social.assistant;
 
 import nl.nextend.videobackoffice.config.BackofficeAiProperties;
-import nl.nextend.videobackoffice.social.SocialApi.AssistantContextMessage;
-import nl.nextend.videobackoffice.social.SocialApi.AssistantReplyRequest;
+import nl.nextend.videobackoffice.social.api.SocialApi.AssistantContextMessage;
+import nl.nextend.videobackoffice.social.api.SocialApi.AssistantReplyRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
