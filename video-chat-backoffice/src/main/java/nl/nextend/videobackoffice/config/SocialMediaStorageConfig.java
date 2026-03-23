@@ -1,8 +1,8 @@
 package nl.nextend.videobackoffice.config;
 
 import io.minio.MinioClient;
-import nl.nextend.videobackoffice.social.MinioSocialMediaStorage;
-import nl.nextend.videobackoffice.social.SocialMediaStorage;
+import nl.nextend.videobackoffice.social.media.MinioSocialMediaStorage;
+import nl.nextend.videobackoffice.social.media.SocialMediaStorage;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

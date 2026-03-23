@@ -1,4 +1,4 @@
-package nl.nextend.videobackoffice.social;
+package nl.nextend.videobackoffice.social.controller;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -6,17 +6,18 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 
-import nl.nextend.videobackoffice.social.SocialApi.CreatePostRequest;
-import nl.nextend.videobackoffice.social.SocialApi.FeedResponse;
-import nl.nextend.videobackoffice.social.SocialApi.GrantAccessRequest;
-import nl.nextend.videobackoffice.social.SocialApi.GrantAccessResult;
-import nl.nextend.videobackoffice.social.SocialApi.MediaResponse;
-import nl.nextend.videobackoffice.social.SocialApi.PostResponse;
-import nl.nextend.videobackoffice.social.SocialApi.ProfileResponse;
-import nl.nextend.videobackoffice.social.SocialApi.ProfileSummary;
-import nl.nextend.videobackoffice.social.SocialApi.ReactRequest;
-import nl.nextend.videobackoffice.social.SocialApi.UpdateProfileRequest;
-import nl.nextend.videobackoffice.social.SocialApi.ViewerResponse;
+import nl.nextend.videobackoffice.social.api.SocialApi.CreatePostRequest;
+import nl.nextend.videobackoffice.social.api.SocialApi.FeedResponse;
+import nl.nextend.videobackoffice.social.api.SocialApi.GrantAccessRequest;
+import nl.nextend.videobackoffice.social.api.SocialApi.GrantAccessResult;
+import nl.nextend.videobackoffice.social.api.SocialApi.MediaResponse;
+import nl.nextend.videobackoffice.social.api.SocialApi.PostResponse;
+import nl.nextend.videobackoffice.social.api.SocialApi.ProfileResponse;
+import nl.nextend.videobackoffice.social.api.SocialApi.ProfileSummary;
+import nl.nextend.videobackoffice.social.api.SocialApi.ReactRequest;
+import nl.nextend.videobackoffice.social.api.SocialApi.UpdateProfileRequest;
+import nl.nextend.videobackoffice.social.api.SocialApi.ViewerResponse;
+import nl.nextend.videobackoffice.social.service.SocialService;
 import jakarta.validation.Valid;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -38,6 +39,9 @@ import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+/**
+ * Exposes the main social HTTP endpoints while delegating all business rules to {@link SocialService}.
+ */
 @RestController
 @RequestMapping("/social/v1")
 public class SocialController {

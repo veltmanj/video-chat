@@ -1,4 +1,4 @@
-package nl.nextend.videobackoffice.social;
+package nl.nextend.videobackoffice.social.api;
 
 import java.time.Instant;
 import java.util.List;
@@ -9,7 +9,15 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import nl.nextend.videobackoffice.social.media.MediaKind;
+import nl.nextend.videobackoffice.social.profile.ProfileVisibility;
 
+/**
+ * Centralizes the HTTP request and response payloads used by the social APIs.
+ *
+ * <p>Keeping the transport records together makes it easier to evolve the controller surface without
+ * coupling the domain services to Spring MVC or WebFlux specific types.
+ */
 public final class SocialApi {
 
     private SocialApi() {

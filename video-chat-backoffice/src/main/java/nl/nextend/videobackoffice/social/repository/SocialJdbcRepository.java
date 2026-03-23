@@ -1,4 +1,4 @@
-package nl.nextend.videobackoffice.social;
+package nl.nextend.videobackoffice.social.repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -17,12 +17,22 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import nl.nextend.videobackoffice.social.media.MediaKind;
+import nl.nextend.videobackoffice.social.profile.AuthUser;
+import nl.nextend.videobackoffice.social.profile.ProfileVisibility;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
+/**
+ * JDBC-backed persistence gateway for the social domain.
+ *
+ * <p>The repository intentionally returns small immutable row projections rather than entity graphs.
+ * That keeps query shapes explicit and allows the higher layers to batch-hydrate API responses
+ * without an ORM.
+ */
 @Repository
-class SocialJdbcRepository {
+public class SocialJdbcRepository {
 
     private static final RowMapper<ProfileRow> PROFILE_ROW_MAPPER = (rs, rowNum) -> new ProfileRow(
         rs.getObject("id", UUID.class),
@@ -64,7 +74,7 @@ class SocialJdbcRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    Optional<ProfileRow> findProfileBySubject(String subject) {
+    public Optional<ProfileRow> findProfileBySubject(String subject) {
         return jdbcTemplate.query(
             "select * from profiles where subject = ?",
             PROFILE_ROW_MAPPER,
@@ -72,7 +82,7 @@ class SocialJdbcRepository {
         ).stream().findFirst();
     }
 
-    Optional<ProfileRow> findProfileByHandle(String handle) {
+    public Optional<ProfileRow> findProfileByHandle(String handle) {
         return jdbcTemplate.query(
             "select * from profiles where handle = ?",
             PROFILE_ROW_MAPPER,
@@ -80,7 +90,7 @@ class SocialJdbcRepository {
         ).stream().findFirst();
     }
 
-    boolean existsHandle(String handle) {
+    public boolean existsHandle(String handle) {
         Integer count = jdbcTemplate.queryForObject(
             "select count(*) from profiles where handle = ?",
             Integer.class,
@@ -89,7 +99,7 @@ class SocialJdbcRepository {
         return count != null && count > 0;
     }
 
-    ProfileRow insertProfile(UUID id, AuthUser user, String handle, Instant now) {
+    public ProfileRow insertProfile(UUID id, AuthUser user, String handle, Instant now) {
         jdbcTemplate.update(
             """
             insert into profiles (id, subject, email, display_name, handle, avatar_url, bio, visibility, created_at, updated_at)
@@ -109,7 +119,7 @@ class SocialJdbcRepository {
         return findProfileById(id).orElseThrow();
     }
 
-    Optional<ProfileRow> findProfileById(UUID id) {
+    public Optional<ProfileRow> findProfileById(UUID id) {
         return jdbcTemplate.query(
             "select * from profiles where id = ?",
             PROFILE_ROW_MAPPER,
@@ -117,7 +127,7 @@ class SocialJdbcRepository {
         ).stream().findFirst();
     }
 
-    ProfileRow updateProfile(UUID id, String displayName, String bio, ProfileVisibility visibility, Instant now) {
+    public ProfileRow updateProfile(UUID id, String displayName, String bio, ProfileVisibility visibility, Instant now) {
         jdbcTemplate.update(
             """
             update profiles
@@ -133,7 +143,7 @@ class SocialJdbcRepository {
         return findProfileById(id).orElseThrow();
     }
 
-    RelationshipSnapshot relationship(UUID viewerId, UUID targetId) {
+    public RelationshipSnapshot relationship(UUID viewerId, UUID targetId) {
         return jdbcTemplate.queryForObject(
             """
             select
@@ -161,7 +171,7 @@ class SocialJdbcRepository {
         );
     }
 
-    List<ProfileSearchRow> searchProfiles(UUID viewerId, String query, boolean mutualOnly, int limit) {
+    public List<ProfileSearchRow> searchProfiles(UUID viewerId, String query, boolean mutualOnly, int limit) {
         String normalizedQuery = query == null ? "" : query.trim().toLowerCase();
         String sql = """
             select
@@ -215,7 +225,7 @@ class SocialJdbcRepository {
         );
     }
 
-    List<ProfileRow> findProfilesByHandles(Collection<String> handles) {
+    public List<ProfileRow> findProfilesByHandles(Collection<String> handles) {
         if (handles.isEmpty()) {
             return List.of();
         }
@@ -233,7 +243,7 @@ class SocialJdbcRepository {
         );
     }
 
-    List<ProfileRow> findAccessGrantedProfiles(UUID ownerId) {
+    public List<ProfileRow> findAccessGrantedProfiles(UUID ownerId) {
         return jdbcTemplate.query(
             """
             select p.*
@@ -247,7 +257,7 @@ class SocialJdbcRepository {
         );
     }
 
-    void follow(UUID followerId, UUID followedId, Instant now) {
+    public void follow(UUID followerId, UUID followedId, Instant now) {
         jdbcTemplate.update(
             """
             insert into profile_follows (follower_profile_id, followed_profile_id, created_at)
@@ -260,7 +270,7 @@ class SocialJdbcRepository {
         );
     }
 
-    void unfollow(UUID followerId, UUID followedId) {
+    public void unfollow(UUID followerId, UUID followedId) {
         jdbcTemplate.update(
             "delete from profile_follows where follower_profile_id = ? and followed_profile_id = ?",
             followerId,
@@ -268,7 +278,7 @@ class SocialJdbcRepository {
         );
     }
 
-    void grantAccess(UUID ownerId, Collection<UUID> viewerIds, Instant now) {
+    public void grantAccess(UUID ownerId, Collection<UUID> viewerIds, Instant now) {
         for (UUID viewerId : viewerIds) {
             jdbcTemplate.update(
                 """
@@ -283,7 +293,7 @@ class SocialJdbcRepository {
         }
     }
 
-    PostRow createPost(UUID postId, UUID authorProfileId, String body, Instant now) {
+    public PostRow createPost(UUID postId, UUID authorProfileId, String body, Instant now) {
         jdbcTemplate.update(
             """
             insert into posts (id, author_profile_id, body, created_at, updated_at)
@@ -298,7 +308,7 @@ class SocialJdbcRepository {
         return findPostById(postId).orElseThrow();
     }
 
-    MediaAssetRow createMedia(UUID mediaId,
+    public MediaAssetRow createMedia(UUID mediaId,
                               UUID ownerProfileId,
                               String storageKey,
                               String originalFilename,
@@ -323,7 +333,7 @@ class SocialJdbcRepository {
         return findMediaById(mediaId).orElseThrow();
     }
 
-    List<MediaAssetRow> findMediaByIdsAndOwner(Collection<UUID> mediaIds, UUID ownerProfileId) {
+    public List<MediaAssetRow> findMediaByIdsAndOwner(Collection<UUID> mediaIds, UUID ownerProfileId) {
         if (mediaIds.isEmpty()) {
             return List.of();
         }
@@ -353,7 +363,7 @@ class SocialJdbcRepository {
         );
     }
 
-    Optional<MediaAssetRow> findMediaById(UUID mediaId) {
+    public Optional<MediaAssetRow> findMediaById(UUID mediaId) {
         return jdbcTemplate.query(
             """
             select
@@ -373,7 +383,7 @@ class SocialJdbcRepository {
         ).stream().findFirst();
     }
 
-    void attachMedia(UUID postId, List<UUID> mediaIds) {
+    public void attachMedia(UUID postId, List<UUID> mediaIds) {
         for (int index = 0; index < mediaIds.size(); index++) {
             jdbcTemplate.update(
                 """
@@ -387,7 +397,7 @@ class SocialJdbcRepository {
         }
     }
 
-    Optional<PostRow> findPostById(UUID postId) {
+    public Optional<PostRow> findPostById(UUID postId) {
         return jdbcTemplate.query(
             """
             select
@@ -407,7 +417,7 @@ class SocialJdbcRepository {
         ).stream().findFirst();
     }
 
-    List<PostRow> findRecentPostsForAuthor(UUID authorId, int limit) {
+    public List<PostRow> findRecentPostsForAuthor(UUID authorId, int limit) {
         return jdbcTemplate.query(
             """
             select
@@ -430,7 +440,7 @@ class SocialJdbcRepository {
         );
     }
 
-    List<PostRow> findFeedPosts(UUID viewerId, int limit) {
+    public List<PostRow> findFeedPosts(UUID viewerId, int limit) {
         return jdbcTemplate.query(
             """
             select
@@ -466,7 +476,7 @@ class SocialJdbcRepository {
         );
     }
 
-    Map<UUID, List<MediaAssetRow>> loadMediaForPosts(Collection<UUID> postIds) {
+    public Map<UUID, List<MediaAssetRow>> loadMediaForPosts(Collection<UUID> postIds) {
         if (postIds.isEmpty()) {
             return Map.of();
         }
@@ -509,7 +519,7 @@ class SocialJdbcRepository {
         return grouped;
     }
 
-    Optional<MediaAccessRow> findMediaAccessById(UUID mediaId) {
+    public Optional<MediaAccessRow> findMediaAccessById(UUID mediaId) {
         return jdbcTemplate.query(
             """
             select
@@ -537,7 +547,7 @@ class SocialJdbcRepository {
         ).stream().findFirst();
     }
 
-    Map<UUID, Map<String, Integer>> loadReactionCounts(Collection<UUID> postIds) {
+    public Map<UUID, Map<String, Integer>> loadReactionCounts(Collection<UUID> postIds) {
         if (postIds.isEmpty()) {
             return Map.of();
         }
@@ -563,7 +573,7 @@ class SocialJdbcRepository {
         return grouped;
     }
 
-    Map<UUID, Set<String>> loadViewerReactions(UUID viewerId, Collection<UUID> postIds) {
+    public Map<UUID, Set<String>> loadViewerReactions(UUID viewerId, Collection<UUID> postIds) {
         if (postIds.isEmpty()) {
             return Map.of();
         }
@@ -591,7 +601,7 @@ class SocialJdbcRepository {
         return grouped;
     }
 
-    void addReaction(UUID postId, UUID reactorProfileId, String reactionType, Instant now) {
+    public void addReaction(UUID postId, UUID reactorProfileId, String reactionType, Instant now) {
         jdbcTemplate.update(
             """
             insert into post_reactions (post_id, reactor_profile_id, reaction_type, created_at)
@@ -605,7 +615,7 @@ class SocialJdbcRepository {
         );
     }
 
-    void removeReaction(UUID postId, UUID reactorProfileId, String reactionType) {
+    public void removeReaction(UUID postId, UUID reactorProfileId, String reactionType) {
         jdbcTemplate.update(
             """
             delete from post_reactions
@@ -639,7 +649,7 @@ class SocialJdbcRepository {
         return value == null || value.isBlank() ? null : value;
     }
 
-    record ProfileRow(
+    public record ProfileRow(
         UUID id,
         String subject,
         String email,
@@ -653,7 +663,7 @@ class SocialJdbcRepository {
     ) {
     }
 
-    record RelationshipSnapshot(
+    public record RelationshipSnapshot(
         boolean following,
         boolean followsViewer,
         boolean accessGranted,
@@ -662,10 +672,10 @@ class SocialJdbcRepository {
     ) {
     }
 
-    record ProfileSearchRow(ProfileRow profile, boolean following, boolean followsViewer, boolean accessGranted) {
+    public record ProfileSearchRow(ProfileRow profile, boolean following, boolean followsViewer, boolean accessGranted) {
     }
 
-    record PostRow(
+    public record PostRow(
         UUID id,
         UUID authorProfileId,
         String body,
@@ -676,7 +686,7 @@ class SocialJdbcRepository {
     ) {
     }
 
-    record MediaAssetRow(
+    public record MediaAssetRow(
         UUID id,
         UUID ownerProfileId,
         String storageKey,
@@ -688,6 +698,6 @@ class SocialJdbcRepository {
     ) {
     }
 
-    record MediaAccessRow(MediaAssetRow media, UUID postId, UUID authorProfileId) {
+    public record MediaAccessRow(MediaAssetRow media, UUID postId, UUID authorProfileId) {
     }
 }

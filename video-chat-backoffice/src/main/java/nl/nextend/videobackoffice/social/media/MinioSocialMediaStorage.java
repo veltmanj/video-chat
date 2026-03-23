@@ -1,4 +1,4 @@
-package nl.nextend.videobackoffice.social;
+package nl.nextend.videobackoffice.social.media;
 
 import java.io.InputStream;
 import java.nio.file.Path;
@@ -14,6 +14,12 @@ import org.springframework.web.server.ResponseStatusException;
 
 import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 
+/**
+ * MinIO-backed {@link SocialMediaStorage} implementation.
+ *
+ * <p>The bucket is initialized lazily on first use so environments that have media disabled do not
+ * pay the startup cost or fail early because the object store is unavailable.
+ */
 public class MinioSocialMediaStorage implements SocialMediaStorage {
 
     private final MinioClient minioClient;

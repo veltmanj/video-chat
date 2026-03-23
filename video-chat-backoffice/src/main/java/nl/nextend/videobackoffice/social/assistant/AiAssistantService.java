@@ -1,9 +1,14 @@
-package nl.nextend.videobackoffice.social;
+package nl.nextend.videobackoffice.social.assistant;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 import nl.nextend.videobackoffice.config.BackofficeAiProperties;
-import nl.nextend.videobackoffice.social.SocialApi.AssistantContextMessage;
-import nl.nextend.videobackoffice.social.SocialApi.AssistantReplyRequest;
-import nl.nextend.videobackoffice.social.SocialApi.AssistantReplyResponse;
+import nl.nextend.videobackoffice.social.api.SocialApi.AssistantContextMessage;
+import nl.nextend.videobackoffice.social.api.SocialApi.AssistantReplyRequest;
+import nl.nextend.videobackoffice.social.api.SocialApi.AssistantReplyResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
@@ -13,11 +18,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
+/**
+ * Wraps the OpenAI Responses API behind the social-room specific prompt contract.
+ *
+ * <p>The service is responsible for input validation, prompt assembly, error normalization, and
+ * extracting the assistant's reply from the OpenAI response envelope.
+ */
 @Service
 public class AiAssistantService {
 

@@ -1,4 +1,4 @@
-package nl.nextend.videobackoffice.social;
+package nl.nextend.videobackoffice.social.telemetry;
 
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
+/**
+ * Receives low-cost client telemetry events from the social frontend.
+ */
 @RestController
 @RequestMapping("/social/v1")
 public class FrontendTelemetryController {

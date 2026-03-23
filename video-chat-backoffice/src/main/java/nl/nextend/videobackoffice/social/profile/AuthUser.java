@@ -1,11 +1,17 @@
-package nl.nextend.videobackoffice.social;
+package nl.nextend.videobackoffice.social.profile;
 
 import java.util.Locale;
 
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.util.StringUtils;
 
-record AuthUser(String subject, String email, String displayName, String avatarUrl) {
+/**
+ * Authenticated user projection derived from a JWT.
+ *
+ * <p>The social profile subsystem uses this record as a stable hand-off from authentication claims
+ * into local profile creation and handle derivation logic.
+ */
+public record AuthUser(String subject, String email, String displayName, String avatarUrl) {
 
     static AuthUser fromJwt(Jwt jwt) {
         String subject = trim(jwt.getSubject());

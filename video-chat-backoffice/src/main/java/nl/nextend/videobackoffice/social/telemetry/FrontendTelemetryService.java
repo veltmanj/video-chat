@@ -1,4 +1,4 @@
-package nl.nextend.videobackoffice.social;
+package nl.nextend.videobackoffice.social.telemetry;
 
 import nl.nextend.videobackoffice.observability.BackofficeObservability;
 import org.slf4j.Logger;
@@ -6,6 +6,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 
+/**
+ * Normalizes and forwards frontend telemetry into structured logging and the observability layer.
+ */
 @Service
 public class FrontendTelemetryService {
 
