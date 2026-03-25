@@ -1,0 +1,63 @@
+<section class="profile-column" *ngIf="profile">
+  <div class="panel identity-panel">
+    <div class="identity-head">
+      <div class="profile-avatar">
+        <img *ngIf="avatarUrl; else ownAvatarFallback" [src]="avatarUrl" [alt]="profile.displayName">
+        <ng-template #ownAvatarFallback>
+          <span>{{ profileInitials }}</span>
+        </ng-template>
+      </div>
+      <div class="identity-copy">
+        <p class="kicker">Your profile</p>
+        <h1>{{ profile.displayName }}</h1>
+        <p class="handle">@{{ profile.handle }}</p>
+        <p class="bio-preview">{{ profile.bio || 'No bio yet.' }}</p>
+      </div>
+    </div>
+    <div class="stats">
+      <span>{{ profile.followerCount }} followers</span>
+      <span>{{ profile.followingCount }} following</span>
+      <span>{{ profile.visibility === 'PRIVATE' ? 'Private' : 'Public' }}</span>
+    </div>
+    <div class="avatar-actions">
+      <label class="ghost-button avatar-upload-button" [class.disabled]="avatarUploading">
+        <input type="file" accept="image/*" (change)="avatarFileSelected.emit($event)" [disabled]="avatarUploading">
+        <span>{{ avatarUploading ? 'Uploading...' : profile.avatarUrl ? 'Change photo' : 'Upload photo' }}</span>
+      </label>
+      <button type="button" class="ghost-button" *ngIf="profile.avatarUrl" [disabled]="avatarUploading" (click)="clearAvatar.emit()">
+        Remove photo
+      </button>
+    </div>
+  </div>
+
+  <form class="panel form-panel" (ngSubmit)="saveProfile.emit()">
+    <label>
+      <span>Display name</span>
+      <input type="text" [ngModel]="displayName" (ngModelChange)="displayNameChange.emit($event)" name="displayName" maxlength="80">
+    </label>
+
+    <label>
+      <span>Bio</span>
+      <textarea [ngModel]="bio" (ngModelChange)="bioChange.emit($event)" name="bio" rows="4" maxlength="400"></textarea>
+    </label>
+
+    <label>
+      <span>Visibility</span>
+      <select [ngModel]="visibility" (ngModelChange)="visibilityChange.emit($event)" name="visibility">
+        <option value="PUBLIC">Public</option>
+        <option value="PRIVATE">Private</option>
+      </select>
+    </label>
+
+    <button type="submit">Save profile</button>
+  </form>
+
+  <div class="panel grant-panel" *ngIf="accessGrants.length">
+    <p class="kicker">Granted access</p>
+    <ul>
+      <li *ngFor="let grantedProfile of accessGrants; trackBy: trackByHandle">
+        @{{ grantedProfile.handle }} · {{ grantedProfile.displayName }}
+      </li>
+    </ul>
+  </div>
+</section>

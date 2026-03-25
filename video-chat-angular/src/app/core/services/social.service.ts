@@ -25,6 +25,16 @@ export class SocialService {
     return this.http.put<SocialProfile>(`${this.baseUrl}/me`, payload);
   }
 
+  uploadAvatar(file: File): Observable<SocialProfile> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    return this.http.post<SocialProfile>(`${this.baseUrl}/me/avatar`, formData);
+  }
+
+  clearAvatar(): Observable<SocialProfile> {
+    return this.http.delete<SocialProfile>(`${this.baseUrl}/me/avatar`);
+  }
+
   feed(): Observable<SocialFeedResponse> {
     return this.http.get<SocialFeedResponse>(`${this.baseUrl}/feed`);
   }
@@ -62,6 +72,10 @@ export class SocialService {
 
   mediaBlob(mediaId: string): Observable<Blob> {
     return this.http.get(`${this.baseUrl}/media/${mediaId}/content`, { responseType: 'blob' });
+  }
+
+  avatarBlob(handle: string): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/profiles/${encodeURIComponent(handle)}/avatar`, { responseType: 'blob' });
   }
 
   addReaction(postId: string, reactionType: string): Observable<SocialPost> {

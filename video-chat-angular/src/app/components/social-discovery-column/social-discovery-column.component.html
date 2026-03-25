@@ -1,0 +1,92 @@
+<section class="discovery-column">
+  <div class="panel search-panel">
+    <p class="kicker">Discovery</p>
+    <div class="search-controls">
+      <input
+        type="search"
+        [ngModel]="searchQuery"
+        (ngModelChange)="searchQueryChange.emit($event)"
+        name="searchQuery"
+        placeholder="Search by handle or name">
+      <select [ngModel]="searchScope" (ngModelChange)="searchScopeChange.emit($event)" name="searchScope">
+        <option value="all">All profiles</option>
+        <option value="mutual">Mutual connections</option>
+      </select>
+    </div>
+    <p class="search-hint" *ngIf="canGrantAccess">
+      Search everyone or switch to mutual connections to invite friends in bulk.
+    </p>
+    <button type="button" (click)="performSearch.emit()">Search</button>
+  </div>
+
+  <div class="panel result-list" *ngIf="searchResults.length">
+    <div class="bulk-actions" *ngIf="canGrantAccess">
+      <p>{{ selectedGrantHandles.length ? selectedGrantHandles.length + ' selected for access grants' : 'Select profiles to grant access.' }}</p>
+      <button type="button" (click)="grantSelectedAccess.emit()" [disabled]="!canSubmitSelectedAccess">Grant selected access</button>
+    </div>
+
+    <div class="selected-grants" *ngIf="selectedGrantHandles.length">
+      <button type="button" class="chip-button" *ngFor="let handle of selectedGrantHandles" (click)="removeGrantSelection.emit(handle)">
+        @{{ handle }} ×
+      </button>
+    </div>
+
+    <article class="result-card" *ngFor="let profile of searchResults; trackBy: trackByHandle">
+      <div class="result-copy">
+        <h2>{{ profile.displayName }}</h2>
+        <p>@{{ profile.handle }}</p>
+        <small>{{ profile.visibility === 'PRIVATE' ? 'Private profile' : 'Public profile' }}</small>
+      </div>
+      <div class="result-actions">
+        <button type="button" (click)="openProfile.emit(profile.handle)">View</button>
+        <button type="button" (click)="toggleFollow.emit(profile)">{{ profile.following ? 'Unfollow' : 'Follow' }}</button>
+        <button
+          type="button"
+          *ngIf="canGrantAccess"
+          [class.active]="isGrantSelected(profile.handle)"
+          [disabled]="profile.accessGranted"
+          (click)="toggleGrantSelection.emit(profile)">
+          {{ profile.accessGranted ? 'Access granted' : isGrantSelected(profile.handle) ? 'Selected' : 'Select' }}
+        </button>
+      </div>
+    </article>
+  </div>
+
+  <div class="panel detail-panel" *ngIf="selectedProfile as profile">
+    <p class="kicker">Profile detail</p>
+    <div class="detail-head">
+      <div class="profile-avatar compact">
+        <img *ngIf="selectedProfileAvatarUrl; else detailAvatarFallback" [src]="selectedProfileAvatarUrl" [alt]="profile.displayName">
+        <ng-template #detailAvatarFallback>
+          <span>{{ selectedProfileInitials }}</span>
+        </ng-template>
+      </div>
+      <div>
+        <h2>{{ profile.displayName }}</h2>
+        <p class="handle">@{{ profile.handle }}</p>
+      </div>
+    </div>
+    <p class="bio-preview">{{ profile.bio || 'No bio yet.' }}</p>
+    <div class="stats">
+      <span>{{ profile.followerCount }} followers</span>
+      <span>{{ profile.followingCount }} following</span>
+      <span *ngIf="profile.mutualConnection">Mutual connection</span>
+      <span *ngIf="profile.accessGranted">Access granted</span>
+    </div>
+    <div class="mini-posts" *ngIf="profile.recentPosts.length">
+      <article *ngFor="let post of profile.recentPosts; trackBy: trackByPost">
+        <p *ngIf="post.body">{{ post.body }}</p>
+        <div class="mini-media-grid" *ngIf="post.media.length">
+          <figure class="mini-media-card" *ngFor="let media of post.media; trackBy: trackByMedia">
+            <img *ngIf="media.kind === 'IMAGE' && mediaUrl(media.id) as source" [src]="source" [alt]="media.fileName">
+            <video *ngIf="media.kind === 'VIDEO' && mediaUrl(media.id) as source" [src]="source" muted playsinline preload="metadata"></video>
+            <div class="media-placeholder compact" *ngIf="!mediaUrl(media.id)">
+              <span>Loading...</span>
+            </div>
+          </figure>
+        </div>
+        <time>{{ post.createdAt | date:'short' }}</time>
+      </article>
+    </div>
+  </div>
+</section>

@@ -73,6 +73,8 @@ describe('SocialHubComponent', () => {
     socialService = {
       viewer: vi.fn(),
       updateProfile: vi.fn(),
+      uploadAvatar: vi.fn(),
+      clearAvatar: vi.fn(),
       feed: vi.fn(),
       searchProfiles: vi.fn(),
       profile: vi.fn(),
@@ -81,6 +83,7 @@ describe('SocialHubComponent', () => {
       grantAccess: vi.fn(),
       createPost: vi.fn(),
       uploadMedia: vi.fn(),
+      avatarBlob: vi.fn(),
       mediaBlob: vi.fn(),
       addReaction: vi.fn(),
       removeReaction: vi.fn()
@@ -96,6 +99,7 @@ describe('SocialHubComponent', () => {
       grantedHandles: ['bob', 'carol'],
       missingHandles: []
     }));
+    socialService.avatarBlob.mockReturnValue(of(new Blob(['avatar'])));
     socialService.mediaBlob.mockReturnValue(of(new Blob(['media'])));
 
     await TestBed.configureTestingModule({
@@ -178,6 +182,28 @@ describe('SocialHubComponent', () => {
     expect(component.feed[0]).toEqual(createdPost);
     expect(component.composerUploads).toEqual([]);
     expect(component.statusMessage).toBe('Post published.');
+  });
+
+  it('uploads a new profile photo from the social page', async () => {
+    const updatedProfile = {
+      ...initialViewer.me,
+      avatarUrl: '/social-api/social/v1/profiles/alice/avatar'
+    };
+    const file = new File(['avatar'], 'avatar.png', { type: 'image/png' });
+
+    socialService.uploadAvatar.mockReturnValue(of(updatedProfile));
+
+    await component.onAvatarFileSelected({
+      target: {
+        files: [file],
+        value: ''
+      }
+    } as unknown as Event);
+
+    expect(socialService.uploadAvatar).toHaveBeenCalledWith(file);
+    expect(socialService.avatarBlob).toHaveBeenCalledWith('alice');
+    expect(component.me?.avatarUrl).toBe('/social-api/social/v1/profiles/alice/avatar');
+    expect(component.statusMessage).toBe('Profile photo updated.');
   });
 
   function createSummary(handle: string, displayName: string): SocialProfileSummary {

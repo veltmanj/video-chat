@@ -1,7 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, DestroyRef, NgZone, inject } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
+import { SocialDiscoveryColumnComponent } from '../../components/social-discovery-column/social-discovery-column.component';
+import { SocialFeedColumnComponent } from '../../components/social-feed-column/social-feed-column.component';
+import { SocialProfileColumnComponent } from '../../components/social-profile-column/social-profile-column.component';
 import {
   SocialPost,
   SocialPostMedia,
@@ -11,7 +13,7 @@ import {
 } from '../../core/models/social.models';
 import { SocialService } from '../../core/services/social.service';
 
-interface ComposerUpload {
+export interface ComposerUpload {
   id: string;
   file: File;
   kind: 'IMAGE' | 'VIDEO';
@@ -21,7 +23,7 @@ interface ComposerUpload {
 @Component({
   selector: 'app-social-hub',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, SocialProfileColumnComponent, SocialFeedColumnComponent, SocialDiscoveryColumnComponent],
   templateUrl: './social-hub.component.html',
   styleUrl: './social-hub.component.scss'
 })
@@ -36,6 +38,8 @@ export class SocialHubComponent {
   private autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private readonly mediaObjectUrls = new Map<string, string>();
   private readonly loadingMediaIds = new Set<string>();
+  private readonly avatarObjectUrls = new Map<string, string>();
+  private readonly loadingAvatarHandles = new Set<string>();
 
   me: SocialProfile | null = null;
   accessGrants: SocialProfileSummary[] = [];
@@ -55,6 +59,10 @@ export class SocialHubComponent {
   errorMessage = '';
   loading = true;
   publishingPost = false;
+  avatarUploading = false;
+  avatarPreviewUrl: string | null = null;
+  readonly mediaUrlForView = (mediaId: string): string | null => this.mediaUrl(mediaId);
+  readonly formatUploadSizeForView = (bytes: number): string => this.formatUploadSize(bytes);
 
   constructor(private socialService: SocialService) { }
 
@@ -63,6 +71,7 @@ export class SocialHubComponent {
     this.startAutoRefresh();
     this.destroyRef.onDestroy(() => {
       this.revokeRemoteMediaUrls();
+      this.revokeAvatarUrls();
       this.clearComposerUploads();
     });
   }
@@ -97,6 +106,7 @@ export class SocialHubComponent {
         }
       });
       this.queueMediaLoadsFromCurrentState();
+      this.queueAvatarLoadsFromCurrentState();
     } catch (error) {
       console.error('Failed to load social hub', error);
       this.runInZone(() => {
@@ -122,7 +132,7 @@ export class SocialHubComponent {
       }));
 
       this.runInZone(() => {
-        this.me = updated;
+        this.applyOwnProfile(updated);
         this.statusMessage = 'Profile saved.';
       });
       this.syncMediaForPosts(updated.recentPosts);
@@ -202,6 +212,7 @@ export class SocialHubComponent {
         this.selectedProfile = profile;
       });
       this.syncMediaForPosts(profile.recentPosts);
+      this.ensureAvatarObjectUrl(profile);
     } catch (error) {
       console.error('Failed to load profile', error);
       this.runInZone(() => {
@@ -330,6 +341,83 @@ export class SocialHubComponent {
     }
   }
 
+  async onAvatarFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.[0] ?? null;
+    if (!file) {
+      return;
+    }
+
+    this.runInZone(() => {
+      this.resetMessages();
+      if (!file.type.startsWith('image/')) {
+        this.errorMessage = 'Only image files are supported for profile photos.';
+      }
+    });
+    if (this.errorMessage) {
+      if (input) {
+        input.value = '';
+      }
+      return;
+    }
+
+    this.clearAvatarPreview();
+    const previewUrl = URL.createObjectURL(file);
+    this.runInZone(() => {
+      this.avatarPreviewUrl = previewUrl;
+      this.avatarUploading = true;
+    });
+
+    try {
+      const updated = await firstValueFrom(this.socialService.uploadAvatar(file));
+      this.runInZone(() => {
+        this.clearProfileAvatarObjectUrl(updated.handle);
+        this.applyOwnProfile(updated);
+        this.statusMessage = 'Profile photo updated.';
+      });
+      this.ensureAvatarObjectUrl(updated, true);
+    } catch (error) {
+      console.error('Failed to upload avatar', error);
+      this.runInZone(() => {
+        this.errorMessage = 'Could not update the profile photo.';
+      });
+    } finally {
+      if (input) {
+        input.value = '';
+      }
+      this.runInZone(() => {
+        this.avatarUploading = false;
+      });
+      this.clearAvatarPreview();
+    }
+  }
+
+  async clearAvatar(): Promise<void> {
+    this.runInZone(() => {
+      this.resetMessages();
+      this.avatarUploading = true;
+    });
+
+    try {
+      const updated = await firstValueFrom(this.socialService.clearAvatar());
+      this.runInZone(() => {
+        this.clearProfileAvatarObjectUrl(updated.handle);
+        this.applyOwnProfile(updated);
+        this.statusMessage = 'Profile photo removed.';
+      });
+    } catch (error) {
+      console.error('Failed to clear avatar', error);
+      this.runInZone(() => {
+        this.errorMessage = 'Could not remove the profile photo.';
+      });
+    } finally {
+      this.runInZone(() => {
+        this.avatarUploading = false;
+      });
+      this.clearAvatarPreview();
+    }
+  }
+
   removeComposerUpload(uploadId: string): void {
     const upload = this.composerUploads.find((candidate) => candidate.id === uploadId);
     if (!upload) {
@@ -342,6 +430,43 @@ export class SocialHubComponent {
 
   mediaUrl(mediaId: string): string | null {
     return this.mediaObjectUrls.get(mediaId) ?? null;
+  }
+
+  profileAvatarUrl(profile: SocialProfile | SocialProfileSummary | null): string | null {
+    if (!profile) {
+      return null;
+    }
+
+    if (this.avatarPreviewUrl && this.me?.handle === profile.handle) {
+      return this.avatarPreviewUrl;
+    }
+
+    const objectUrl = this.avatarObjectUrls.get(profile.handle);
+    if (objectUrl) {
+      return objectUrl;
+    }
+
+    if (!profile.avatarUrl) {
+      return null;
+    }
+
+    return this.requiresAuthenticatedAvatarFetch(profile.avatarUrl) ? null : profile.avatarUrl;
+  }
+
+  profileInitials(displayName: string | null | undefined): string {
+    const parts = (displayName ?? '')
+      .split(/\s+/)
+      .map((part) => part.trim())
+      .filter((part) => !!part);
+
+    if (!parts.length) {
+      return 'PR';
+    }
+
+    return parts
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('');
   }
 
   formatUploadSize(bytes: number): string {
@@ -406,6 +531,7 @@ export class SocialHubComponent {
       this.applyViewer(viewer);
     });
     this.syncMediaForPosts(viewer.me.recentPosts);
+    this.queueAvatarLoadsFromCurrentState();
   }
 
   private startAutoRefresh(): void {
@@ -428,11 +554,8 @@ export class SocialHubComponent {
   }
 
   private applyViewer(viewer: SocialViewerResponse): void {
-    this.me = viewer.me;
+    this.applyOwnProfile(viewer.me);
     this.accessGrants = viewer.accessGrants;
-    this.displayName = viewer.me.displayName;
-    this.bio = viewer.me.bio;
-    this.visibility = viewer.me.visibility;
   }
 
   private mergeSearchProfile(updated: SocialProfileSummary): void {
@@ -469,6 +592,11 @@ export class SocialHubComponent {
     this.syncMediaForPosts(this.feed);
     this.syncMediaForPosts(this.me?.recentPosts ?? []);
     this.syncMediaForPosts(this.selectedProfile?.recentPosts ?? []);
+  }
+
+  private queueAvatarLoadsFromCurrentState(): void {
+    this.ensureAvatarObjectUrl(this.me);
+    this.ensureAvatarObjectUrl(this.selectedProfile);
   }
 
   private syncMediaForPosts(posts: SocialPost[]): void {
@@ -515,6 +643,77 @@ export class SocialHubComponent {
     }
     this.mediaObjectUrls.clear();
     this.loadingMediaIds.clear();
+  }
+
+  private applyOwnProfile(profile: SocialProfile): void {
+    this.me = profile;
+    this.displayName = profile.displayName;
+    this.bio = profile.bio;
+    this.visibility = profile.visibility;
+
+    if (this.selectedProfile?.handle === profile.handle) {
+      this.selectedProfile = profile;
+    }
+  }
+
+  private ensureAvatarObjectUrl(profile: SocialProfile | SocialProfileSummary | null, forceReload = false): void {
+    if (!profile?.avatarUrl || !this.requiresAuthenticatedAvatarFetch(profile.avatarUrl)) {
+      return;
+    }
+
+    if (forceReload) {
+      this.clearProfileAvatarObjectUrl(profile.handle);
+    }
+
+    if (this.avatarObjectUrls.has(profile.handle) || this.loadingAvatarHandles.has(profile.handle)) {
+      return;
+    }
+
+    this.loadingAvatarHandles.add(profile.handle);
+    void firstValueFrom(this.socialService.avatarBlob(profile.handle))
+      .then((blob) => {
+        const objectUrl = URL.createObjectURL(blob);
+        this.runInZone(() => {
+          this.clearProfileAvatarObjectUrl(profile.handle);
+          this.avatarObjectUrls.set(profile.handle, objectUrl);
+        });
+      })
+      .catch((error) => {
+        console.error('Failed to load avatar blob', error);
+      })
+      .finally(() => {
+        this.runInZone(() => {
+          this.loadingAvatarHandles.delete(profile.handle);
+        });
+      });
+  }
+
+  private requiresAuthenticatedAvatarFetch(avatarUrl: string): boolean {
+    return avatarUrl.startsWith('/social-api/');
+  }
+
+  private clearProfileAvatarObjectUrl(handle: string): void {
+    const objectUrl = this.avatarObjectUrls.get(handle);
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+      this.avatarObjectUrls.delete(handle);
+    }
+  }
+
+  private clearAvatarPreview(): void {
+    if (this.avatarPreviewUrl) {
+      URL.revokeObjectURL(this.avatarPreviewUrl);
+      this.avatarPreviewUrl = null;
+    }
+  }
+
+  private revokeAvatarUrls(): void {
+    this.clearAvatarPreview();
+    for (const objectUrl of this.avatarObjectUrls.values()) {
+      URL.revokeObjectURL(objectUrl);
+    }
+    this.avatarObjectUrls.clear();
+    this.loadingAvatarHandles.clear();
   }
 
   private resolveComposerMediaKind(file: File): 'IMAGE' | 'VIDEO' | null {
