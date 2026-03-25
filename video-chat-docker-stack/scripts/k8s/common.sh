@@ -86,6 +86,64 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"
 }
 
+current_kube_context() {
+  kubectl config current-context 2>/dev/null || true
+}
+
+kubectl_context_exists() {
+  local context="$1"
+
+  kubectl config get-contexts -o name 2>/dev/null | grep -Fxq "${context}"
+}
+
+select_kube_context() {
+  local desired_context="$1"
+  local current_context
+
+  [[ -n "${desired_context}" ]] || return 0
+  kubectl_context_exists "${desired_context}" \
+    || fail "kubectl context ${desired_context} is not configured. Set VIDEOCHAT_KUBECTL_CONTEXT to a valid context and retry."
+
+  current_context="$(current_kube_context)"
+  if [[ "${current_context}" == "${desired_context}" ]]; then
+    return 0
+  fi
+
+  log_info "Selecting kubectl context ${desired_context}."
+  run_with_log_mode kubectl config use-context "${desired_context}" >/dev/null
+}
+
+require_kube_cluster_access() {
+  local context
+
+  context="$(current_kube_context)"
+  [[ -n "${context}" ]] || fail "kubectl has no current context. Run 'kubectl config use-context <name>' and retry."
+
+  kubectl get namespace default --request-timeout=5s >/dev/null 2>&1 \
+    || fail "kubectl cannot reach the cluster for context ${context}. Verify the cluster is running and kubeconfig is correct."
+}
+
+k8s_namespace_exists() {
+  local namespace="$1"
+  local output
+
+  output="$(kubectl get namespace "${namespace}" --ignore-not-found -o name 2>/dev/null)" \
+    || fail "kubectl failed while checking namespace ${namespace}. Verify context $(current_kube_context)."
+
+  [[ -n "${output}" ]]
+}
+
+k8s_service_exists() {
+  local namespace="$1"
+  local service="$2"
+  local output
+
+  output="$(kubectl get svc "${service}" --namespace "${namespace}" --ignore-not-found -o name 2>/dev/null)" \
+    || fail "kubectl failed while checking service ${namespace}/${service}. Verify context $(current_kube_context)."
+
+  [[ -n "${output}" ]]
+}
+
 # Normalize env values that may have been edited on Windows.
 trim_cr() {
   printf '%s' "${1%$'\r'}"

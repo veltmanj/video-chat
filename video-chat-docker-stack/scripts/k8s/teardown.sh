@@ -71,6 +71,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 load_k8s_env "${ENV_FILE}"
+select_kube_context "${VIDEOCHAT_KUBECTL_CONTEXT:-docker-desktop}"
+require_kube_cluster_access
 
 DEFAULT_INGRESS_NGINX_MANIFEST_URL="${K8S_INGRESS_NGINX_MANIFEST_URL:-https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.2/deploy/static/provider/cloud/deploy.yaml}"
 INGRESS_NAMESPACE="${K8S_INGRESS_NGINX_NAMESPACE:-ingress-nginx}"
@@ -82,7 +84,7 @@ wait_for_namespace_deletion() {
   local remaining="${NAMESPACE_DELETE_TIMEOUT_SECONDS}"
   local finalize_payload
 
-  while kubectl get namespace "${namespace}" >/dev/null 2>&1; do
+  while k8s_namespace_exists "${namespace}"; do
     if (( remaining <= 0 )); then
       echo "Namespace ${namespace} is still terminating after ${NAMESPACE_DELETE_TIMEOUT_SECONDS}s. Clearing namespace finalizers." >&2
       finalize_payload="$(kubectl get namespace "${namespace}" -o json 2>/dev/null | perl -0pe 's/"finalizers":\s*\[[^\]]*\]/"finalizers":[]/')"
@@ -97,7 +99,7 @@ wait_for_namespace_deletion() {
 }
 
 delete_namespace_and_wait() {
-  if ! kubectl get namespace "${K8S_NAMESPACE}" >/dev/null 2>&1; then
+  if ! k8s_namespace_exists "${K8S_NAMESPACE}"; then
     log_info "Namespace ${K8S_NAMESPACE} does not exist."
     return
   fi
@@ -186,15 +188,17 @@ delete_ingress_nginx_if_managed() {
 # - delete the app namespace first
 # - then restore ingress service state
 # - finally remove ingress-nginx only when bootstrap owned it
+log_info "Context: $(current_kube_context)"
+log_info "Namespace: ${K8S_NAMESPACE}"
 log_step "Deleting application namespace"
 delete_namespace_and_wait
 
-if kubectl get svc "${INGRESS_SERVICE}" --namespace "${INGRESS_NAMESPACE}" >/dev/null 2>&1; then
+if k8s_service_exists "${INGRESS_NAMESPACE}" "${INGRESS_SERVICE}"; then
   log_step "Resetting Docker Desktop ingress service"
   reset_docker_desktop_exposure
 fi
 
-if kubectl get namespace "${INGRESS_NAMESPACE}" >/dev/null 2>&1; then
+if k8s_namespace_exists "${INGRESS_NAMESPACE}"; then
   log_step "Handling ingress-nginx cleanup"
   delete_ingress_nginx_if_managed
 fi
@@ -213,4 +217,4 @@ else
   log_skip "local env file deletion because --delete-env-file was not provided."
 fi
 
-echo "Teardown complete."
+echo "Teardown complete for namespace ${K8S_NAMESPACE} on context $(current_kube_context)."

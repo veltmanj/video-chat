@@ -51,6 +51,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 load_k8s_env "${ENV_FILE}"
+require_kube_cluster_access
+log_info "Context: $(current_kube_context)"
 log_step "Deleting namespace ${K8S_NAMESPACE}"
 run_with_log_mode kubectl delete namespace "${K8S_NAMESPACE}" --ignore-not-found
 printf 'Delete requested for namespace %s\n' "${K8S_NAMESPACE}"
