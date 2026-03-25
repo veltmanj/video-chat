@@ -101,6 +101,8 @@ class SocialMediaServiceTest {
             handle,
             "",
             "",
+            "",
+            "",
             visibility,
             Instant.parse("2026-03-23T12:00:00Z"),
             Instant.parse("2026-03-23T12:00:00Z")

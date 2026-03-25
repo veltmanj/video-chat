@@ -219,6 +219,46 @@ class SocialIntegrationTest {
         assertThat(mutualResults.get(0).canView()).isTrue();
     }
 
+    @Test
+    void shouldUploadAndServeProfileAvatarsIndependentlyFromIdentityProviderPictures() {
+        viewer(ALICE);
+        byte[] avatarBytes = "avatar-image".getBytes(StandardCharsets.UTF_8);
+
+        ProfileResponse avatarUpdated = uploadAvatar(ALICE, "avatar.png", "image/png", avatarBytes);
+
+        assertThat(avatarUpdated.avatarUrl()).isEqualTo("/social-api/social/v1/profiles/alice/avatar");
+
+        byte[] downloadedAvatar = auth(ALICE)
+            .get()
+            .uri("/social/v1/profiles/{handle}/avatar", "alice")
+            .exchange()
+            .expectStatus().isOk()
+            .expectHeader().contentType(MediaType.IMAGE_PNG)
+            .expectBody(byte[].class)
+            .returnResult()
+            .getResponseBody();
+
+        assertThat(downloadedAvatar).isEqualTo(avatarBytes);
+
+        ProfileResponse avatarCleared = auth(ALICE)
+            .delete()
+            .uri("/social/v1/me/avatar")
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody(ProfileResponse.class)
+            .returnResult()
+            .getResponseBody();
+
+        assertThat(avatarCleared).isNotNull();
+        assertThat(avatarCleared.avatarUrl()).isNull();
+
+        auth(ALICE)
+            .get()
+            .uri("/social/v1/profiles/{handle}/avatar", "alice")
+            .exchange()
+            .expectStatus().isNotFound();
+    }
+
     private ViewerResponse viewer(TestUser user) {
         return auth(user)
             .get()
@@ -268,6 +308,24 @@ class SocialIntegrationTest {
             .exchange()
             .expectStatus().isOk()
             .expectBody(MediaResponse.class)
+            .returnResult()
+            .getResponseBody();
+    }
+
+    private ProfileResponse uploadAvatar(TestUser user, String fileName, String contentType, byte[] body) {
+        MultipartBodyBuilder builder = new MultipartBodyBuilder();
+        builder.part("file", body)
+            .filename(fileName)
+            .contentType(MediaType.parseMediaType(contentType));
+
+        return auth(user)
+            .post()
+            .uri("/social/v1/me/avatar")
+            .contentType(MediaType.MULTIPART_FORM_DATA)
+            .bodyValue(builder.build())
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody(ProfileResponse.class)
             .returnResult()
             .getResponseBody();
     }
@@ -322,6 +380,8 @@ class SocialIntegrationTest {
                 display_name varchar(80) not null,
                 handle varchar(32) not null unique,
                 avatar_url text,
+                avatar_storage_key varchar(512),
+                avatar_content_type varchar(255),
                 bio varchar(400) not null default '',
                 visibility varchar(16) not null,
                 created_at timestamp not null,

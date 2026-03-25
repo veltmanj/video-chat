@@ -85,6 +85,8 @@ class SocialProfileSupportTest {
             handle,
             "",
             "",
+            "",
+            "",
             visibility,
             Instant.parse("2026-03-23T10:15:30Z"),
             Instant.parse("2026-03-23T10:15:30Z")

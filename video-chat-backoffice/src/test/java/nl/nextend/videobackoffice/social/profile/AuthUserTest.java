@@ -13,9 +13,11 @@ class AuthUserTest {
             .header("alg", "none")
             .subject("subject-1")
             .claim("email", "alice@example.com")
+            .claim("picture", "https://example.com/avatar.png")
             .build());
 
         assertThat(user.displayName()).isEqualTo("alice@example.com");
+        assertThat(user.avatarUrl()).isEmpty();
         assertThat(user.suggestedHandleBase()).isEqualTo("alice");
     }
 

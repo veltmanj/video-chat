@@ -41,6 +41,8 @@ public class SocialJdbcRepository {
         rs.getString("display_name"),
         rs.getString("handle"),
         rs.getString("avatar_url"),
+        rs.getString("avatar_storage_key"),
+        rs.getString("avatar_content_type"),
         rs.getString("bio"),
         ProfileVisibility.valueOf(rs.getString("visibility")),
         timestamp(rs, "created_at"),
@@ -102,8 +104,10 @@ public class SocialJdbcRepository {
     public ProfileRow insertProfile(UUID id, AuthUser user, String handle, Instant now) {
         jdbcTemplate.update(
             """
-            insert into profiles (id, subject, email, display_name, handle, avatar_url, bio, visibility, created_at, updated_at)
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            insert into profiles (
+                id, subject, email, display_name, handle, avatar_url, avatar_storage_key, avatar_content_type, bio, visibility, created_at, updated_at
+            )
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             id,
             user.subject(),
@@ -111,6 +115,8 @@ public class SocialJdbcRepository {
             user.displayName(),
             handle,
             emptyToNull(user.avatarUrl()),
+            null,
+            null,
             "",
             ProfileVisibility.PUBLIC.name(),
             Timestamp.from(now),
@@ -137,6 +143,39 @@ public class SocialJdbcRepository {
             displayName,
             bio,
             visibility.name(),
+            Timestamp.from(now),
+            id
+        );
+        return findProfileById(id).orElseThrow();
+    }
+
+    public ProfileRow updateProfileAvatar(UUID id,
+                                          String avatarUrl,
+                                          String avatarStorageKey,
+                                          String avatarContentType,
+                                          Instant now) {
+        jdbcTemplate.update(
+            """
+            update profiles
+            set avatar_url = ?, avatar_storage_key = ?, avatar_content_type = ?, updated_at = ?
+            where id = ?
+            """,
+            emptyToNull(avatarUrl),
+            emptyToNull(avatarStorageKey),
+            emptyToNull(avatarContentType),
+            Timestamp.from(now),
+            id
+        );
+        return findProfileById(id).orElseThrow();
+    }
+
+    public ProfileRow clearProfileAvatar(UUID id, Instant now) {
+        jdbcTemplate.update(
+            """
+            update profiles
+            set avatar_url = null, avatar_storage_key = null, avatar_content_type = null, updated_at = ?
+            where id = ?
+            """,
             Timestamp.from(now),
             id
         );
@@ -181,6 +220,8 @@ public class SocialJdbcRepository {
                 p.display_name,
                 p.handle,
                 p.avatar_url,
+                p.avatar_storage_key,
+                p.avatar_content_type,
                 p.bio,
                 p.visibility,
                 p.created_at,
@@ -656,6 +697,8 @@ public class SocialJdbcRepository {
         String displayName,
         String handle,
         String avatarUrl,
+        String avatarStorageKey,
+        String avatarContentType,
         String bio,
         ProfileVisibility visibility,
         Instant createdAt,

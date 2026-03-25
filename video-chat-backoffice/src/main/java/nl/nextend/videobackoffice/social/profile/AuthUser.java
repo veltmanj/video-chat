@@ -17,13 +17,12 @@ public record AuthUser(String subject, String email, String displayName, String 
         String subject = trim(jwt.getSubject());
         String email = trim(jwt.getClaimAsString("email"));
         String displayName = trim(jwt.getClaimAsString("name"));
-        String avatarUrl = trim(jwt.getClaimAsString("picture"));
 
         if (!StringUtils.hasText(displayName)) {
             displayName = StringUtils.hasText(email) ? email : subject;
         }
 
-        return new AuthUser(subject, email, displayName, avatarUrl);
+        return new AuthUser(subject, email, displayName, "");
     }
 
     String suggestedHandleBase() {

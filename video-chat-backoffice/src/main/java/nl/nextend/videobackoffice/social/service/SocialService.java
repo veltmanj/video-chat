@@ -53,6 +53,14 @@ public class SocialService {
         return profileService.updateProfile(jwt, request);
     }
 
+    public ProfileResponse uploadAvatar(Jwt jwt, String fileName, String contentType, Path tempFile) {
+        return profileService.uploadAvatar(jwt, fileName, contentType, tempFile);
+    }
+
+    public ProfileResponse clearAvatar(Jwt jwt) {
+        return profileService.clearAvatar(jwt);
+    }
+
     public FeedResponse feed(Jwt jwt) {
         return postService.feed(jwt);
     }
@@ -63,6 +71,10 @@ public class SocialService {
 
     public ProfileResponse profile(Jwt jwt, String handle) {
         return profileService.profile(jwt, handle);
+    }
+
+    public MediaContent downloadAvatar(Jwt jwt, String handle) {
+        return profileService.downloadAvatar(jwt, handle);
     }
 
     public ProfileSummary follow(Jwt jwt, String handle) {

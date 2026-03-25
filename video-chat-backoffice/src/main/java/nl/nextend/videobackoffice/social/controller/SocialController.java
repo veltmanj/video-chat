@@ -63,6 +63,24 @@ public class SocialController {
         return socialService.updateProfile(jwt, request);
     }
 
+    @PostMapping(path = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    Mono<ProfileResponse> uploadAvatar(@AuthenticationPrincipal Jwt jwt, @RequestPart("file") FilePart filePart) {
+        String contentType = filePart.headers().getContentType() == null ? "" : filePart.headers().getContentType().toString();
+        return Mono.usingWhen(
+            Mono.fromCallable(() -> Files.createTempFile("social-avatar-", ".bin"))
+                .subscribeOn(Schedulers.boundedElastic()),
+            tempFile -> filePart.transferTo(tempFile)
+                .then(Mono.fromCallable(() -> socialService.uploadAvatar(jwt, filePart.filename(), contentType, tempFile))
+                    .subscribeOn(Schedulers.boundedElastic())),
+            SocialController::deleteTempFile
+        );
+    }
+
+    @DeleteMapping("/me/avatar")
+    ProfileResponse clearAvatar(@AuthenticationPrincipal Jwt jwt) {
+        return socialService.clearAvatar(jwt);
+    }
+
     @GetMapping("/feed")
     FeedResponse feed(@AuthenticationPrincipal Jwt jwt) {
         return socialService.feed(jwt);
@@ -78,6 +96,21 @@ public class SocialController {
     @GetMapping("/profiles/{handle}")
     ProfileResponse profile(@AuthenticationPrincipal Jwt jwt, @PathVariable String handle) {
         return socialService.profile(jwt, handle);
+    }
+
+    @GetMapping("/profiles/{handle}/avatar")
+    Mono<ResponseEntity<byte[]>> avatar(@AuthenticationPrincipal Jwt jwt, @PathVariable String handle) {
+        return Mono.fromCallable(() -> socialService.downloadAvatar(jwt, handle))
+            .subscribeOn(Schedulers.boundedElastic())
+            .map(media -> ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=300")
+                .header(
+                    HttpHeaders.CONTENT_DISPOSITION,
+                    ContentDisposition.inline().filename(media.fileName()).build().toString()
+                )
+                .contentType(MediaType.parseMediaType(media.mimeType()))
+                .contentLength(media.bytes().length)
+                .body(media.bytes()));
     }
 
     @PostMapping("/profiles/{handle}/follow")
