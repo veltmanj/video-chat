@@ -41,7 +41,6 @@ describe('AppComponent', () => {
           provide: AuthService,
           useValue: {
             isAuthenticated: true,
-            profileImageUrl: 'https://example.com/avatar.png',
             profileName: 'Operator Name',
             logout: vi.fn()
           }
@@ -53,12 +52,12 @@ describe('AppComponent', () => {
     fixture.detectChanges();
 
     const profileLink = fixture.nativeElement.querySelector('.profile-link') as HTMLAnchorElement | null;
-    const profileImage = fixture.nativeElement.querySelector('.profile-link img') as HTMLImageElement | null;
+    const profileInitials = fixture.nativeElement.querySelector('.profile-link span') as HTMLSpanElement | null;
     const profileMenu = fixture.nativeElement.querySelector('.profile-menu') as HTMLDivElement | null;
 
     expect(profileLink).not.toBeNull();
     expect(profileLink?.getAttribute('href')).toBe('/social');
-    expect(profileImage?.getAttribute('src')).toBe('https://example.com/avatar.png');
+    expect(profileInitials?.textContent?.trim()).toBe('ON');
     expect(profileMenu).toBeNull();
   });
 
@@ -75,7 +74,6 @@ describe('AppComponent', () => {
           provide: AuthService,
           useValue: {
             isAuthenticated: true,
-            profileImageUrl: 'https://example.com/avatar.png',
             profileName: 'Operator Name',
             logout: logoutSpy
           }
@@ -116,7 +114,6 @@ describe('AppComponent', () => {
           provide: AuthService,
           useValue: {
             isAuthenticated: true,
-            profileImageUrl: 'https://example.com/avatar.png',
             profileName: 'Operator Name',
             logout: vi.fn()
           }
@@ -139,7 +136,7 @@ describe('AppComponent', () => {
     expect(fixture.nativeElement.querySelector('.profile-menu')).toBeNull();
   });
 
-  it('falls back to initials when the profile image fails to load', async () => {
+  it('renders initials for the profile button', async () => {
     TestBed.resetTestingModule();
 
     await TestBed.configureTestingModule({
@@ -150,7 +147,6 @@ describe('AppComponent', () => {
           provide: AuthService,
           useValue: {
             isAuthenticated: true,
-            profileImageUrl: 'https://example.com/avatar.png',
             profileName: 'Operator Name',
             logout: vi.fn()
           }
@@ -159,10 +155,6 @@ describe('AppComponent', () => {
     }).compileComponents();
 
     const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-
-    const profileImage = fixture.nativeElement.querySelector('.profile-link img') as HTMLImageElement;
-    profileImage.dispatchEvent(new Event('error'));
     fixture.detectChanges();
 
     const fallback = fixture.nativeElement.querySelector('.profile-link span') as HTMLSpanElement | null;

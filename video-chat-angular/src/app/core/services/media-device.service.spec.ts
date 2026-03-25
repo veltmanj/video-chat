@@ -96,7 +96,7 @@ describe('MediaDeviceService', () => {
     expect(stop).toHaveBeenCalled();
   });
 
-  it('starts camera with expected constraints', async () => {
+  it('starts camera with expected preferred constraints and audio processing by default', async () => {
     const getUserMedia = vi.fn().mockResolvedValue({ id: 'stream-1' } as any);
     Object.defineProperty(navigator, 'mediaDevices', {
       value: {
@@ -111,7 +111,11 @@ describe('MediaDeviceService', () => {
     expect(getUserMedia).toHaveBeenCalled();
     const constraints = getUserMedia.mock.calls.at(-1)?.[0] as any;
     expect(constraints.video.deviceId.exact).toBe('cam-22');
-    expect(constraints.audio).toBe(false);
+    expect(constraints.audio).toEqual({
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true
+    });
   });
 
   it('retries startCamera with minimal constraints when strict constraints fail', async () => {
@@ -133,7 +137,28 @@ describe('MediaDeviceService', () => {
     expect(getUserMedia).toHaveBeenCalledTimes(2);
     const retryConstraints = getUserMedia.mock.calls[1]?.[0] as any;
     expect(retryConstraints.video.deviceId.exact).toBe('obs-virtual');
-    expect(retryConstraints.audio).toBe(false);
+    expect(retryConstraints.audio).toEqual({
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true
+    });
+  });
+
+  it('can start camera without audio when requested explicitly', async () => {
+    const getUserMedia = vi.fn().mockResolvedValue({ id: 'stream-3' } as any);
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: {
+        getUserMedia,
+        enumerateDevices: vi.fn().mockResolvedValue([])
+      },
+      configurable: true
+    });
+
+    await service.startCamera('cam-muted', false);
+
+    const constraints = getUserMedia.mock.calls.at(-1)?.[0] as any;
+    expect(constraints.video.deviceId.exact).toBe('cam-muted');
+    expect(constraints.audio).toBe(false);
   });
 
   it('stops all stream tracks', () => {

@@ -1,3 +1,6 @@
+import { HttpClient } from '@angular/common/http';
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { NgZone } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
@@ -15,6 +18,7 @@ describe('AuthService', () => {
   let renderButtonSpy: ReturnType<typeof vi.fn>;
   let promptSpy: ReturnType<typeof vi.fn>;
   let disableAutoSelectSpy: ReturnType<typeof vi.fn>;
+  let httpMock: HttpTestingController;
 
   beforeEach(() => {
     window.__VIDEOCHAT_CONFIG__ = {
@@ -41,16 +45,18 @@ describe('AuthService', () => {
     } as any;
 
     TestBed.configureTestingModule({
-      providers: [AuthService]
+      providers: [AuthService, provideHttpClient(), provideHttpClientTesting()]
     });
 
     service = TestBed.inject(AuthService);
+    httpMock = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {
     delete window.__VIDEOCHAT_CONFIG__;
     delete window.google;
     sessionStorage.clear();
+    httpMock.verify();
   });
 
   it('initializes Google Identity Services once', async () => {
@@ -106,9 +112,9 @@ describe('AuthService', () => {
       email: 'stored@example.com',
       exp: Math.floor(Date.now() / 1000) + 3600
     });
-    sessionStorage.setItem('pulse-room:google-id-token', storedToken);
+    sessionStorage.setItem('pulse-room:identity-token', storedToken);
 
-    const restoredService = new AuthService(TestBed.inject(NgZone));
+    const restoredService = new AuthService(TestBed.inject(NgZone), TestBed.inject(HttpClient));
 
     expect(restoredService.brokerToken).toBe(storedToken);
     expect(restoredService.isAuthenticated).toBe(true);
@@ -128,13 +134,13 @@ describe('AuthService', () => {
 
     expect(service.isAuthenticated).toBe(false);
     expect(service.brokerToken).toBeNull();
-    expect(sessionStorage.getItem('pulse-room:google-id-token')).toBeNull();
+    expect(sessionStorage.getItem('pulse-room:identity-token')).toBeNull();
     expect(disableAutoSelectSpy).toHaveBeenCalledTimes(1);
   });
 
   it('fails fast when the Google client ID is missing', async () => {
     delete window.__VIDEOCHAT_CONFIG__;
-    const unconfiguredService = new AuthService(TestBed.inject(NgZone));
+    const unconfiguredService = new AuthService(TestBed.inject(NgZone), TestBed.inject(HttpClient));
 
     await expect(unconfiguredService.renderGoogleButton(document.createElement('div'))).rejects.toThrow(
       'Google OAuth client ID is not configured.'
@@ -143,5 +149,32 @@ describe('AuthService', () => {
 
   it('exposes development mode from runtime config', () => {
     expect(service.isDevelopmentMode).toBe(true);
+  });
+
+  it('stores a backend-issued email token when the callback completes', () => {
+    const token = createIdToken({
+      iss: 'https://localhost/social-api/social/v1/auth',
+      sub: 'email:account-1',
+      email: 'operator@example.com',
+      name: 'Operator Example',
+      exp: Math.floor(Date.now() / 1000) + 3600
+    });
+
+    service.completeEmailAuthentication(token);
+
+    expect(service.brokerToken).toBe(token);
+    expect(service.profileName).toBe('Operator Example');
+    expect(sessionStorage.getItem('pulse-room:identity-token')).toBe(token);
+  });
+
+  it('posts email login requests to the backoffice auth endpoint', async () => {
+    const pending = service.loginWithEmail('operator@example.com');
+    const request = httpMock.expectOne('/social-api/social/v1/auth/email/login');
+
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ email: 'operator@example.com' });
+
+    request.flush({ message: 'Check your email for a secure sign-in link.' });
+    await expect(pending).resolves.toBe('Check your email for a secure sign-in link.');
   });
 });

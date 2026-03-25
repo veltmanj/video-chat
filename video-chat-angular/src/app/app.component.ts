@@ -11,19 +11,9 @@ import { AuthService } from './core/services/auth.service';
   imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive]
 })
 export class AppComponent {
-  private failedProfileImageUrl: string | null = null;
   profileMenuOpen = false;
 
   constructor(public auth: AuthService, private router: Router) { }
-
-  get profileImageUrl(): string | null {
-    const currentUrl = this.auth.profileImageUrl;
-    if (!currentUrl || currentUrl === this.failedProfileImageUrl) {
-      return null;
-    }
-
-    return currentUrl;
-  }
 
   get profileName(): string {
     return this.auth.profileName || 'My social profile';
@@ -45,10 +35,6 @@ export class AppComponent {
       .join('');
   }
 
-  onProfileImageError(): void {
-    this.failedProfileImageUrl = this.auth.profileImageUrl;
-  }
-
   openProfileMenu(event: MouseEvent): void {
     event.preventDefault();
     this.profileMenuOpen = true;
@@ -60,7 +46,6 @@ export class AppComponent {
 
   logout(): void {
     this.closeProfileMenu();
-    this.failedProfileImageUrl = null;
     this.auth.logout();
     void this.router.navigateByUrl('/login');
   }

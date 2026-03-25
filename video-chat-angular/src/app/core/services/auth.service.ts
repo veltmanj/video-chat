@@ -1,5 +1,7 @@
+import { HttpClient } from '@angular/common/http';
 import { Injectable, NgZone } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { resolveAppMode, resolveGoogleClientId } from '../config/runtime-config';
 
 declare global {
@@ -45,6 +47,7 @@ interface GoogleNamespace {
 type IdentityClaims = Record<string, unknown> | null;
 
 const GOOGLE_ID_TOKEN_STORAGE_KEY = 'pulse-room:google-id-token';
+const IDENTITY_TOKEN_STORAGE_KEY = 'pulse-room:identity-token';
 const GOOGLE_IDENTITY_SCRIPT_ID = 'google-identity-services';
 const GOOGLE_IDENTITY_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 
@@ -65,7 +68,7 @@ export class AuthService {
   readonly authState$ = this.authStateSubject.asObservable();
   readonly debugEvents$ = this.debugEventSubject.asObservable();
 
-  constructor(private ngZone: NgZone) {
+  constructor(private ngZone: NgZone, private http: HttpClient) {
     this.restoreStoredSession();
   }
 
@@ -130,6 +133,40 @@ export class AuthService {
     this.pushDebugEvent('logout');
     this.clearSession();
     window.google?.accounts?.id?.disableAutoSelect();
+  }
+
+  async registerWithEmail(email: string, displayName: string): Promise<string> {
+    const response = await firstValueFrom(this.http.post<{ message: string }>(
+      '/social-api/social/v1/auth/email/register',
+      { email, displayName }
+    ));
+    return response.message;
+  }
+
+  async loginWithEmail(email: string): Promise<string> {
+    const response = await firstValueFrom(this.http.post<{ message: string }>(
+      '/social-api/social/v1/auth/email/login',
+      { email }
+    ));
+    return response.message;
+  }
+
+  completeEmailAuthentication(token: string): void {
+    const claims = this.decodeJwtClaims(token);
+    if (!claims) {
+      this.clearSession();
+      this.pushDebugEvent('email-token-invalid');
+      return;
+    }
+
+    const expiresAt = this.readJwtExpiry(claims);
+    if (expiresAt !== null && expiresAt <= Date.now()) {
+      this.clearSession();
+      this.pushDebugEvent('email-token-expired');
+      return;
+    }
+
+    this.persistSession(token, claims, 'email-token-accepted');
   }
 
   get accessToken(): string | null {
@@ -285,11 +322,11 @@ export class AuthService {
       return;
     }
 
-    this.idTokenValue = response.credential;
-    this.identityClaimsValue = claims;
-    window.sessionStorage.setItem(GOOGLE_ID_TOKEN_STORAGE_KEY, response.credential);
-    this.authStateSubject.next(true);
-    this.pushDebugEvent(`credential-received${response.select_by ? `:${response.select_by}` : ''}`);
+    this.persistSession(
+      response.credential,
+      claims,
+      `credential-received${response.select_by ? `:${response.select_by}` : ''}`
+    );
   }
 
   private restoreStoredSession(): void {
@@ -297,7 +334,11 @@ export class AuthService {
       return;
     }
 
-    const storedToken = window.sessionStorage.getItem(GOOGLE_ID_TOKEN_STORAGE_KEY)?.trim() ?? '';
+    const storedToken = (
+      window.sessionStorage.getItem(IDENTITY_TOKEN_STORAGE_KEY)
+      ?? window.sessionStorage.getItem(GOOGLE_ID_TOKEN_STORAGE_KEY)
+      ?? ''
+    ).trim();
     if (!storedToken) {
       this.clearSession(false);
       return;
@@ -317,10 +358,7 @@ export class AuthService {
       return;
     }
 
-    this.idTokenValue = storedToken;
-    this.identityClaimsValue = claims;
-    this.authStateSubject.next(true);
-    this.pushDebugEvent('stored-token-restored');
+    this.persistSession(storedToken, claims, 'stored-token-restored', false);
   }
 
   private clearSession(removeStoredToken = true): void {
@@ -329,8 +367,23 @@ export class AuthService {
     this.authStateSubject.next(false);
 
     if (removeStoredToken && typeof window !== 'undefined') {
+      window.sessionStorage.removeItem(IDENTITY_TOKEN_STORAGE_KEY);
       window.sessionStorage.removeItem(GOOGLE_ID_TOKEN_STORAGE_KEY);
     }
+  }
+
+  private persistSession(token: string,
+                         claims: Record<string, unknown>,
+                         debugEvent: string,
+                         storeToken = true): void {
+    this.idTokenValue = token;
+    this.identityClaimsValue = claims;
+    if (storeToken && typeof window !== 'undefined') {
+      window.sessionStorage.setItem(IDENTITY_TOKEN_STORAGE_KEY, token);
+      window.sessionStorage.removeItem(GOOGLE_ID_TOKEN_STORAGE_KEY);
+    }
+    this.authStateSubject.next(true);
+    this.pushDebugEvent(debugEvent);
   }
 
   private decodeJwtClaims(token: string): IdentityClaims {

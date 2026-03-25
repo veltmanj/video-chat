@@ -1,0 +1,32 @@
+<div class="dev-panel">
+  <p class="dev-kicker">Development mode</p>
+  <p class="dev-copy">OAuth setup details are visible because the stack is running in development mode.</p>
+  <div class="status-callout" [class.status-error]="!hasGoogleClientId">
+    <span class="status-label">Required origin</span>
+    <code>{{ currentOrigin }}</code>
+  </div>
+  <div class="config-card" *ngIf="!hasGoogleClientId">
+    <h3>Missing Google client ID</h3>
+    <p>Set a real client ID and rebuild the frontend:</p>
+    <code>./scripts/configure-google-oauth.sh &lt;google-web-client-id&gt;</code>
+    <p>Google Console values:</p>
+    <ul>
+      <li>Authorized JavaScript origin: <code>{{ currentOrigin }}</code></li>
+      <li>Google Sign-In popup flow does not use a redirect URI in this frontend.</li>
+    </ul>
+  </div>
+  <div class="config-card">
+    <h3>Google sign-in diagnostics</h3>
+    <p>Google Identity Services loaded: <code>{{ isGoogleIdentityLoaded ? 'yes' : 'no' }}</code></p>
+    <p>Google button rendered: <code>{{ isGoogleButtonRendered ? 'yes' : 'no' }}</code></p>
+    <p>Broker token present: <code>{{ brokerTokenPresent ? 'yes' : 'no' }}</code></p>
+    <p>Access token present: <code>{{ accessTokenPresent ? 'yes' : 'no' }}</code></p>
+    <p>Identity claims: <code>{{ identitySummary }}</code></p>
+    <p *ngIf="oauthDebugEvents.length">OAuth events:</p>
+    <ul *ngIf="oauthDebugEvents.length">
+      <li *ngFor="let event of oauthDebugEvents"><code>{{ event }}</code></li>
+    </ul>
+    <p *ngIf="authDebugMessage">Init error:</p>
+    <code *ngIf="authDebugMessage">{{ authDebugMessage }}</code>
+  </div>
+</div>

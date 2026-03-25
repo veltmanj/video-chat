@@ -1,18 +1,5 @@
 <main class="login-page">
-  <section class="hero-panel">
-    <div class="hero-lockup">
-      <img src="assets/pulseroom-mark.svg" alt="PulseRoom">
-      <div>
-        <p class="hero-wordmark">PULSEROOM</p>
-        <p class="eyebrow">Realtime video rooms</p>
-      </div>
-    </div>
-    <h1>Continue to the control room.</h1>
-    <p class="lead">
-      Sign in with a trusted provider and continue directly into the live room.
-    </p>
-    <p class="hero-note">Google is available now. Additional providers can be added without changing the room flow.</p>
-  </section>
+  <app-login-hero></app-login-hero>
 
   <section class="login-panel">
     <div class="login-card">
@@ -20,8 +7,18 @@
 
       <p class="error-banner" *ngIf="loginUnavailableMessage">{{ loginUnavailableMessage }}</p>
       <p class="error-banner" *ngIf="errorMessage">{{ errorMessage }}</p>
+      <p class="success-banner" *ngIf="successMessage">{{ successMessage }}</p>
+
+      <app-login-email-auth
+        [(registrationDisplayName)]="emailRegistrationDisplayName"
+        [(registrationAddress)]="emailRegistrationAddress"
+        [(loginAddress)]="emailLoginAddress"
+        [requestInFlight]="emailRequestInFlight"
+        (register)="registerWithEmail()"
+        (login)="loginWithEmail()"></app-login-email-auth>
 
       <div class="google-signin-panel">
+        <p class="signin-section-label">Or continue with Google</p>
         <div class="google-signin-host" #googleButtonHost></div>
       </div>
 
@@ -50,41 +47,20 @@
         <a routerLink="/terms">Terms of Service</a>,
         <a routerLink="/acceptable-use">Acceptable Use Policy</a>,
         and <a routerLink="/cookies">Cookie Policy</a>.
-        Google and other sign-in providers may place cookies on their own domains to complete authentication.
+        Google and other sign-in providers may place cookies on their own domains to complete authentication, and secure email links will redirect through PulseRoom to validate account ownership.
       </p>
 
-      <div class="dev-panel" *ngIf="showDeveloperPanel">
-        <p class="dev-kicker">Development mode</p>
-        <p class="dev-copy">OAuth setup details are visible because the stack is running in development mode.</p>
-        <div class="status-callout" [class.status-error]="!auth.hasGoogleClientId">
-          <span class="status-label">Required origin</span>
-          <code>{{ currentOrigin }}</code>
-        </div>
-        <div class="config-card" *ngIf="!auth.hasGoogleClientId">
-          <h3>Missing Google client ID</h3>
-          <p>Set a real client ID and rebuild the frontend:</p>
-          <code>./scripts/configure-google-oauth.sh &lt;google-web-client-id&gt;</code>
-          <p>Google Console values:</p>
-          <ul>
-            <li>Authorized JavaScript origin: <code>{{ currentOrigin }}</code></li>
-            <li>Google Sign-In popup flow does not use a redirect URI in this frontend.</li>
-          </ul>
-        </div>
-        <div class="config-card">
-          <h3>Google sign-in diagnostics</h3>
-          <p>Google Identity Services loaded: <code>{{ auth.isGoogleIdentityLoaded ? 'yes' : 'no' }}</code></p>
-          <p>Google button rendered: <code>{{ auth.isGoogleButtonRendered ? 'yes' : 'no' }}</code></p>
-          <p>Broker token present: <code>{{ brokerTokenPresent ? 'yes' : 'no' }}</code></p>
-          <p>Access token present: <code>{{ accessTokenPresent ? 'yes' : 'no' }}</code></p>
-          <p>Identity claims: <code>{{ identitySummary }}</code></p>
-          <p *ngIf="auth.oauthDebugEvents.length">OAuth events:</p>
-          <ul *ngIf="auth.oauthDebugEvents.length">
-            <li *ngFor="let event of auth.oauthDebugEvents"><code>{{ event }}</code></li>
-          </ul>
-          <p *ngIf="authDebugMessage">Init error:</p>
-          <code *ngIf="authDebugMessage">{{ authDebugMessage }}</code>
-        </div>
-      </div>
+      <app-login-developer-panel
+        *ngIf="showDeveloperPanel"
+        [currentOrigin]="currentOrigin"
+        [hasGoogleClientId]="auth.hasGoogleClientId"
+        [isGoogleIdentityLoaded]="auth.isGoogleIdentityLoaded"
+        [isGoogleButtonRendered]="auth.isGoogleButtonRendered"
+        [brokerTokenPresent]="brokerTokenPresent"
+        [accessTokenPresent]="accessTokenPresent"
+        [identitySummary]="identitySummary"
+        [oauthDebugEvents]="auth.oauthDebugEvents"
+        [authDebugMessage]="authDebugMessage"></app-login-developer-panel>
 
       <p class="legal-note">
         Google is a trademark of Google LLC. Apple and the Apple logo are trademarks of Apple Inc., registered in the U.S. and other countries. X and its logo are trademarks of X Corp. Provider marks are used only to identify sign-in methods and do not imply endorsement.

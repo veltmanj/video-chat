@@ -16,6 +16,7 @@ describe('LoginComponent', () => {
       accessToken: null,
       authState$: new BehaviorSubject(false),
       brokerToken: null,
+      completeEmailAuthentication: vi.fn(),
       hasGoogleClientId: true,
       identityClaims: null,
       initialize: vi.fn().mockResolvedValue(undefined),
@@ -23,7 +24,9 @@ describe('LoginComponent', () => {
       isDevelopmentMode: false,
       isGoogleButtonRendered: false,
       isGoogleIdentityLoaded: true,
+      loginWithEmail: vi.fn().mockResolvedValue('Check your email for a secure sign-in link.'),
       oauthDebugEvents: [],
+      registerWithEmail: vi.fn().mockResolvedValue('We sent a verification link to your email address.'),
       renderGoogleButton: vi.fn().mockResolvedValue(undefined)
     } as unknown as MockedObject<AuthService> & { authState$: BehaviorSubject<boolean>; };
 
@@ -128,5 +131,16 @@ describe('LoginComponent', () => {
     expect(text).toContain('Google button rendered');
     expect(text).toContain('credential-received:btn');
     expect(text).toContain('operator@example.com');
+  });
+
+  it('submits an email registration request from the login page', async () => {
+    createComponent();
+    component.emailRegistrationDisplayName = 'Alice Example';
+    component.emailRegistrationAddress = 'alice@example.com';
+
+    await component.registerWithEmail();
+
+    expect(authService.registerWithEmail).toHaveBeenCalledWith('alice@example.com', 'Alice Example');
+    expect(component.successMessage).toContain('verification link');
   });
 });

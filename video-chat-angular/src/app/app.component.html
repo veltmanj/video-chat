@@ -13,10 +13,7 @@
         [attr.title]="profileName"
         (click)="closeProfileMenu()"
         (contextmenu)="openProfileMenu($event)">
-        <img *ngIf="profileImageUrl; else profileFallback" [src]="profileImageUrl" [alt]="profileName" (error)="onProfileImageError()">
-        <ng-template #profileFallback>
-          <span>{{ profileInitials }}</span>
-        </ng-template>
+        <span>{{ profileInitials }}</span>
       </a>
       <div class="profile-menu" *ngIf="profileMenuOpen" role="menu" aria-label="Profile actions">
         <button type="button" class="profile-menu-item" role="menuitem" (click)="logout()">

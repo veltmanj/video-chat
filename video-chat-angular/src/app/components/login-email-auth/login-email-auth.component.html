@@ -1,0 +1,53 @@
+<section class="email-auth-panel">
+  <div class="email-auth-copy">
+    <h2>Passwordless email access</h2>
+    <p>Register a verified email once, then use secure sign-in links whenever you need access.</p>
+  </div>
+
+  <form class="email-form" (ngSubmit)="register.emit()">
+    <label>
+      <span>Display name</span>
+      <input
+        type="text"
+        name="emailRegistrationDisplayName"
+        [ngModel]="registrationDisplayName"
+        (ngModelChange)="registrationDisplayNameChange.emit($event)"
+        maxlength="80"
+        autocomplete="name"
+        placeholder="How your account should appear">
+    </label>
+    <label>
+      <span>Email address</span>
+      <input
+        type="email"
+        name="emailRegistrationAddress"
+        [ngModel]="registrationAddress"
+        (ngModelChange)="registrationAddressChange.emit($event)"
+        maxlength="320"
+        autocomplete="email"
+        placeholder="name@example.com">
+    </label>
+    <button type="submit" class="email-action-button" [disabled]="requestInFlight">
+      {{ requestInFlight ? 'Sending...' : 'Create account and verify email' }}
+    </button>
+  </form>
+
+  <div class="email-divider"><span>Already registered?</span></div>
+
+  <form class="email-form compact" (ngSubmit)="login.emit()">
+    <label>
+      <span>Email address</span>
+      <input
+        type="email"
+        name="emailLoginAddress"
+        [ngModel]="loginAddress"
+        (ngModelChange)="loginAddressChange.emit($event)"
+        maxlength="320"
+        autocomplete="email"
+        placeholder="name@example.com">
+    </label>
+    <button type="submit" class="email-action-button secondary" [disabled]="requestInFlight">
+      {{ requestInFlight ? 'Sending...' : 'Email me a secure sign-in link' }}
+    </button>
+  </form>
+</section>
