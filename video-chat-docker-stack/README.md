@@ -87,11 +87,16 @@ export to BigQuery:
 This requires a one-time Cloud Billing export to BigQuery setup. The full setup
 steps are documented in [docs/INSTALL-CONFIGURE-MAINTAIN-KUBERNETES.md](./docs/INSTALL-CONFIGURE-MAINTAIN-KUBERNETES.md).
 
-To tear it back down again:
+To tear the deployed namespace and public GKE-side resources back down again while
+keeping the cluster and Artifact Registry repository:
 
 ```bash
 ./scripts/gke/teardown.sh
 ```
+
+Add `--delete-cluster` if you also want to remove the GKE cluster, and add
+`--delete-artifact-repository` if you want to remove the Artifact Registry
+repository too.
 
 To replace the cluster itself while keeping the static IP, managed certificate,
 DNS record, Artifact Registry repository, and local env file, use:

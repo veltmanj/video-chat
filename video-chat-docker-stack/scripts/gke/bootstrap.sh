@@ -269,7 +269,7 @@ seed_env_defaults() {
   [[ -n "${project_id}" ]] || fail "GCP_PROJECT_ID is empty and no default gcloud project is configured."
 
   region="$(trim_cr "$(read_env_value "${ENV_FILE}" "GCP_REGION")")"
-  region="${region:-us-central1}"
+  region="${region:-europe-west4}"
   artifact_repo="$(trim_cr "$(read_env_value "${ENV_FILE}" "GKE_ARTIFACT_REPOSITORY")")"
   artifact_repo="${artifact_repo:-videochat}"
   cluster_name="$(trim_cr "$(read_env_value "${ENV_FILE}" "GKE_CLUSTER_NAME")")"
