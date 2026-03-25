@@ -119,6 +119,14 @@ service_annotation() {
     -o "jsonpath={.metadata.annotations.${key}}" 2>/dev/null || true
 }
 
+service_field() {
+  local path="$1"
+
+  kubectl get svc "${INGRESS_SERVICE}" \
+    --namespace "${INGRESS_NAMESPACE}" \
+    -o "jsonpath=${path}" 2>/dev/null || true
+}
+
 reset_docker_desktop_exposure() {
   local managed original_http original_https
 
@@ -172,9 +180,26 @@ ingress_installed_by_bootstrap() {
   [[ "${managed}" == "true" ]]
 }
 
+ingress_is_docker_desktop_localhost_loadbalancer() {
+  local service_type lb_target
+
+  [[ "$(current_kube_context)" == "docker-desktop" ]] || return 1
+
+  service_type="$(service_field '{.spec.type}')"
+  lb_target="$(service_field '{.status.loadBalancer.ingress[0].ip}{.status.loadBalancer.ingress[0].hostname}')"
+
+  [[ "${service_type}" == "LoadBalancer" && "${lb_target}" == "localhost" ]]
+}
+
 delete_ingress_nginx_if_managed() {
-  if [[ "${DELETE_INGRESS_NGINX}" != "true" ]] && ! ingress_installed_by_bootstrap; then
-    log_skip "ingress-nginx removal because it is not marked as bootstrap-managed."
+  if [[ "${DELETE_INGRESS_NGINX}" == "true" ]]; then
+    log_info "Removing ingress-nginx because --delete-ingress-nginx was provided."
+  elif ingress_installed_by_bootstrap; then
+    log_info "Removing ingress-nginx because bootstrap installed it."
+  elif ingress_is_docker_desktop_localhost_loadbalancer; then
+    log_info "Removing ingress-nginx because Docker Desktop still exposes it through a localhost load balancer."
+  else
+    log_skip "ingress-nginx removal because it is neither bootstrap-managed nor a Docker Desktop localhost load balancer."
     return
   fi
 
@@ -187,7 +212,8 @@ delete_ingress_nginx_if_managed() {
 # Teardown order:
 # - delete the app namespace first
 # - then restore ingress service state
-# - finally remove ingress-nginx only when bootstrap owned it
+# - finally remove ingress-nginx when bootstrap owned it or when Docker Desktop
+#   still exposes it through a localhost load balancer
 log_info "Context: $(current_kube_context)"
 log_info "Namespace: ${K8S_NAMESPACE}"
 log_step "Deleting application namespace"

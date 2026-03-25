@@ -413,7 +413,7 @@ To tear the environment down again:
 ./scripts/k8s/teardown.sh
 ```
 
-That removes the application namespace, resets Docker Desktop ingress exposure when this stack changed it, and removes `ingress-nginx` only when bootstrap installed it. To force removal of `ingress-nginx` as well:
+That removes the application namespace, resets Docker Desktop ingress exposure when this stack changed it, and removes `ingress-nginx` when bootstrap installed it or when Docker Desktop still exposes it as a localhost `LoadBalancer`. To force removal of `ingress-nginx` in other cases as well:
 
 ```bash
 ./scripts/k8s/teardown.sh --delete-ingress-nginx
@@ -653,7 +653,7 @@ For GKE-managed public resources, use the companion instead:
 
 Useful teardown flags:
 
-- `--delete-ingress-nginx`: remove `ingress-nginx` even if it was not marked as bootstrap-managed
+- `--delete-ingress-nginx`: remove `ingress-nginx` even if it was not marked as bootstrap-managed and is not a Docker Desktop localhost `LoadBalancer`
 - `--delete-env-file`: remove `k8s/k8s.env`
 - `--delete-rendered`: remove `k8s/rendered/`
 
