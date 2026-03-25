@@ -418,6 +418,8 @@ That removes the application namespace, resets Docker Desktop ingress exposure w
 ./scripts/k8s/teardown.sh --delete-ingress-nginx
 ```
 
+`teardown.sh` defaults to the `docker-desktop` kube context for the local Kubernetes flow. Set `VIDEOCHAT_KUBECTL_CONTEXT=<name>` if you want to target a different local context. It does not remove Kubernetes system workloads such as pods in `kube-system`, and it leaves any shared namespaces unrelated to this stack alone. The GKE teardown flow fetches credentials for the configured cluster and passes that kube context through automatically.
+
 ## 4. Build and publish images
 
 Build the three application images:
