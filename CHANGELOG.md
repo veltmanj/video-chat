@@ -2,6 +2,22 @@
 
 All notable changes to this repository are documented in this file.
 
+## [0.2.0] - 2026-03-25
+
+### Added
+- Passwordless email registration and sign-in across the Angular frontend, backoffice API, and local Docker stack.
+- Stored social-profile avatars with upload, removal, authenticated delivery, and frontend avatar management in the social hub.
+- Standalone Angular login panels and social-hub column components to break the frontend into clearer UI slices.
+- Kubernetes and GKE teardown safeguards that select the intended kube context automatically for local and cloud cleanup flows.
+
+### Changed
+- GKE bootstrap defaults now point at the leaner `europe-west4` baseline instead of the previous `us-central1` defaults.
+- GKE teardown documentation now states more clearly which resources are preserved by default and which flags remove the cluster or Artifact Registry repository.
+
+### Fixed
+- Local Kubernetes teardown no longer reports success when `kubectl` is disconnected or pointed at the wrong cluster.
+- GKE teardown wrappers now pass the active cluster context through to the shared Kubernetes teardown script instead of falling back to a local context.
+
 ## [0.1.0] - 2026-03-20
 
 ### Added
