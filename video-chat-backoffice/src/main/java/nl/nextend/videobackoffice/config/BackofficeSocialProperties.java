@@ -1,17 +1,24 @@
 package nl.nextend.videobackoffice.config;
 
+import java.time.Duration;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties("backoffice.social")
 public class BackofficeSocialProperties {
 
     private final Auth auth = new Auth();
+    private final Email email = new Email();
     private final Media media = new Media();
     private int feedLimit = 50;
     private int searchLimit = 20;
 
     public Auth getAuth() {
         return auth;
+    }
+
+    public Email getEmail() {
+        return email;
     }
 
     public int getFeedLimit() {
@@ -127,6 +134,108 @@ public class BackofficeSocialProperties {
 
         public void setBucket(String bucket) {
             this.bucket = bucket;
+        }
+    }
+
+    public static class Email {
+        private boolean enabled;
+        private String issuer = "https://localhost/social-api/social/v1/auth";
+        private String audience = "pulseroom-email";
+        private String jwkJson = "";
+        private String publicBaseUrl = "https://localhost";
+        private String loginPath = "/login";
+        private Duration registrationLinkTtl = Duration.ofHours(24);
+        private Duration loginLinkTtl = Duration.ofMinutes(20);
+        private Duration sessionTtl = Duration.ofHours(12);
+        private String fromAddress = "no-reply@pulseroom.local";
+        private String fromName = "PulseRoom";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getIssuer() {
+            return issuer;
+        }
+
+        public void setIssuer(String issuer) {
+            this.issuer = issuer;
+        }
+
+        public String getAudience() {
+            return audience;
+        }
+
+        public void setAudience(String audience) {
+            this.audience = audience;
+        }
+
+        public String getJwkJson() {
+            return jwkJson;
+        }
+
+        public void setJwkJson(String jwkJson) {
+            this.jwkJson = jwkJson;
+        }
+
+        public String getPublicBaseUrl() {
+            return publicBaseUrl;
+        }
+
+        public void setPublicBaseUrl(String publicBaseUrl) {
+            this.publicBaseUrl = publicBaseUrl;
+        }
+
+        public String getLoginPath() {
+            return loginPath;
+        }
+
+        public void setLoginPath(String loginPath) {
+            this.loginPath = loginPath;
+        }
+
+        public Duration getRegistrationLinkTtl() {
+            return registrationLinkTtl;
+        }
+
+        public void setRegistrationLinkTtl(Duration registrationLinkTtl) {
+            this.registrationLinkTtl = registrationLinkTtl;
+        }
+
+        public Duration getLoginLinkTtl() {
+            return loginLinkTtl;
+        }
+
+        public void setLoginLinkTtl(Duration loginLinkTtl) {
+            this.loginLinkTtl = loginLinkTtl;
+        }
+
+        public Duration getSessionTtl() {
+            return sessionTtl;
+        }
+
+        public void setSessionTtl(Duration sessionTtl) {
+            this.sessionTtl = sessionTtl;
+        }
+
+        public String getFromAddress() {
+            return fromAddress;
+        }
+
+        public void setFromAddress(String fromAddress) {
+            this.fromAddress = fromAddress;
+        }
+
+        public String getFromName() {
+            return fromName;
+        }
+
+        public void setFromName(String fromName) {
+            this.fromName = fromName;
         }
     }
 }

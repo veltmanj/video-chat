@@ -37,6 +37,18 @@ backoffice:
       google-issuer: ${BACKOFFICE_SOCIAL_GOOGLE_ISSUER:https://accounts.google.com}
       google-jwk-set-uri: ${BACKOFFICE_SOCIAL_GOOGLE_JWK_SET_URI:https://www.googleapis.com/oauth2/v3/certs}
       google-audience: ${BACKOFFICE_SOCIAL_GOOGLE_AUDIENCE:}
+    email:
+      enabled: ${BACKOFFICE_SOCIAL_EMAIL_ENABLED:false}
+      issuer: ${BACKOFFICE_SOCIAL_EMAIL_ISSUER:${BACKOFFICE_SOCIAL_PUBLIC_BASE_URL:https://localhost}/social-api/social/v1/auth}
+      audience: ${BACKOFFICE_SOCIAL_EMAIL_AUDIENCE:pulseroom-email}
+      jwk-json: ${BACKOFFICE_SOCIAL_EMAIL_JWK_JSON:}
+      public-base-url: ${BACKOFFICE_SOCIAL_PUBLIC_BASE_URL:https://localhost}
+      login-path: ${BACKOFFICE_SOCIAL_EMAIL_LOGIN_PATH:/login}
+      registration-link-ttl: ${BACKOFFICE_SOCIAL_EMAIL_REGISTRATION_LINK_TTL:24h}
+      login-link-ttl: ${BACKOFFICE_SOCIAL_EMAIL_LOGIN_LINK_TTL:20m}
+      session-ttl: ${BACKOFFICE_SOCIAL_EMAIL_SESSION_TTL:12h}
+      from-address: ${BACKOFFICE_SOCIAL_EMAIL_FROM_ADDRESS:no-reply@pulseroom.local}
+      from-name: ${BACKOFFICE_SOCIAL_EMAIL_FROM_NAME:PulseRoom}
     feed-limit: ${BACKOFFICE_SOCIAL_FEED_LIMIT:50}
     search-limit: ${BACKOFFICE_SOCIAL_SEARCH_LIMIT:20}
     media:

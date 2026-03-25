@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -98,6 +99,18 @@ public final class SocialApi {
     }
 
     public record GrantAccessResult(List<String> grantedHandles, List<String> missingHandles) {
+    }
+
+    public record EmailRegistrationRequest(
+        @NotBlank @Email @Size(max = 320) String email,
+        @NotBlank @Size(max = 80) String displayName
+    ) {
+    }
+
+    public record EmailLoginRequest(@NotBlank @Email @Size(max = 320) String email) {
+    }
+
+    public record EmailAuthStartResponse(String message) {
     }
 
     public record AssistantContextMessage(
