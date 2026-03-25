@@ -316,7 +316,8 @@ Useful recreate-certificate flags:
 - `--env <path>`
 - `--name <value>`
 
-To remove the deployed namespace plus the public GKE-side resources again:
+To remove the deployed namespace plus the public GKE-side resources again while
+keeping the cluster and Artifact Registry repository:
 
 ```bash
 ./scripts/gke/teardown.sh

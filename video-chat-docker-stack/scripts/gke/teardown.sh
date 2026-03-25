@@ -341,7 +341,7 @@ Namespace: ${K8S_NAMESPACE}
 Host: ${K8S_HOST}
 Static IP released: ${K8S_GKE_GATEWAY_ADDRESS_NAME}
 SSL certificate removed: ${K8S_GKE_GATEWAY_SSL_CERTIFICATE_NAME}
-Cluster deleted: ${DELETE_CLUSTER}
-Artifact Registry repository deleted: ${DELETE_ARTIFACT_REPOSITORY}
+Cluster deleted: ${DELETE_CLUSTER}$( [[ "${DELETE_CLUSTER}" == "true" ]] || printf ' (pass --delete-cluster to remove it)' )
+Artifact Registry repository deleted: ${DELETE_ARTIFACT_REPOSITORY}$( [[ "${DELETE_ARTIFACT_REPOSITORY}" == "true" ]] || printf ' (pass --delete-artifact-repository to remove it)' )
 DNS record deleted: ${DELETE_DNS_RECORD}
 EOF
