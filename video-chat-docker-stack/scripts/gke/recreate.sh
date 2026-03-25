@@ -137,14 +137,19 @@ configure_kubectl_context() {
 }
 
 run_k8s_teardown() {
+  local kube_context
+
   cluster_exists || {
     log_skip "Kubernetes namespace teardown because cluster ${GKE_CLUSTER_NAME} does not exist."
     return
   }
 
   configure_kubectl_context
-  log_info "Running Kubernetes teardown for namespace ${K8S_NAMESPACE}."
-  run_with_log_mode "${K8S_SCRIPT_DIR}/teardown.sh" --env "${ENV_FILE}" "--${LOG_LEVEL}"
+  kube_context="$(current_kube_context)"
+  [[ -n "${kube_context}" ]] || fail "Unable to determine kubectl context for GKE cluster ${GKE_CLUSTER_NAME}."
+
+  log_info "Running Kubernetes teardown for namespace ${K8S_NAMESPACE} on context ${kube_context}."
+  VIDEOCHAT_KUBECTL_CONTEXT="${kube_context}" run_with_log_mode "${K8S_SCRIPT_DIR}/teardown.sh" --env "${ENV_FILE}" "--${LOG_LEVEL}"
 }
 
 delete_cluster() {
