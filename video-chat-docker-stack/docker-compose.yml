@@ -27,6 +27,17 @@ services:
       VIDEOCHAT_AI_AGENT_NAME: ${VIDEOCHAT_AI_AGENT_NAME:-Pulse Copilot}
       VIDEOCHAT_AI_AGENT_MENTION: ${VIDEOCHAT_AI_AGENT_MENTION:-@pulse}
 
+  mailpit:
+    <<: *service-defaults
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.25}
+    container_name: ${MAILPIT_CONTAINER_NAME:-videochat-mailpit}
+    ports:
+      - "${MAILPIT_SMTP_HOST_PORT:-1025}:1025"
+      - "${MAILPIT_WEB_HOST_PORT:-8025}:8025"
+    healthcheck:
+      <<: *http-healthcheck
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8025/api/v1/info >/dev/null || exit 1"]
+
   social-db:
     <<: *service-defaults
     image: ${SOCIAL_DB_IMAGE:-postgres:16-alpine}
@@ -202,6 +213,13 @@ services:
                   "name": "x",
                   "vaultPath": "${VAULT_X_SECRET_PATH:-jwt/providers/x}",
                   "vaultField": "${VAULT_PROVIDER_FIELD:-jwks_json}"
+                },
+                {
+                  "enabled": ${BROKER_JWT_EMAIL_ENABLED:-true},
+                  "name": "email",
+                  "issuers": ["${BACKOFFICE_SOCIAL_EMAIL_ISSUER:-https://${VIDEOCHAT_HOST:-localhost}/social-api/social/v1/auth}"],
+                  "audiences": ["${BACKOFFICE_SOCIAL_EMAIL_AUDIENCE:-pulseroom-email}"],
+                  "jwkSetUri": "http://backoffice:7901/social/v1/auth/jwks"
                 }
               ]
             }
@@ -226,6 +244,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      mailpit:
+        condition: service_healthy
     entrypoint: ["/bin/sh", "/vault/scripts/start-backoffice-with-vault.sh"]
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://social-db:5432/${SOCIAL_DB_NAME:-videochat}
@@ -237,6 +257,13 @@ services:
       BACKOFFICE_AI_MODEL: ${BACKOFFICE_AI_MODEL:-gpt-5-mini}
       BACKOFFICE_AI_ASSISTANT_NAME: ${BACKOFFICE_AI_ASSISTANT_NAME:-Pulse Copilot}
       BACKOFFICE_SOCIAL_GOOGLE_AUDIENCE: ${BACKOFFICE_SOCIAL_GOOGLE_AUDIENCE:-}
+      BACKOFFICE_SOCIAL_EMAIL_ENABLED: ${BACKOFFICE_SOCIAL_EMAIL_ENABLED:-true}
+      BACKOFFICE_SOCIAL_PUBLIC_BASE_URL: ${BACKOFFICE_SOCIAL_PUBLIC_BASE_URL:-https://${VIDEOCHAT_HOST:-localhost}}
+      BACKOFFICE_SOCIAL_EMAIL_ISSUER: ${BACKOFFICE_SOCIAL_EMAIL_ISSUER:-https://${VIDEOCHAT_HOST:-localhost}/social-api/social/v1/auth}
+      BACKOFFICE_SOCIAL_EMAIL_AUDIENCE: ${BACKOFFICE_SOCIAL_EMAIL_AUDIENCE:-pulseroom-email}
+      BACKOFFICE_SOCIAL_EMAIL_LOGIN_PATH: ${BACKOFFICE_SOCIAL_EMAIL_LOGIN_PATH:-/login}
+      BACKOFFICE_SOCIAL_EMAIL_FROM_ADDRESS: ${BACKOFFICE_SOCIAL_EMAIL_FROM_ADDRESS:-no-reply@pulseroom.local}
+      BACKOFFICE_SOCIAL_EMAIL_FROM_NAME: ${BACKOFFICE_SOCIAL_EMAIL_FROM_NAME:-PulseRoom}
       BACKOFFICE_SOCIAL_MEDIA_ENABLED: ${BACKOFFICE_SOCIAL_MEDIA_ENABLED:-true}
       BACKOFFICE_SOCIAL_MEDIA_ENDPOINT: http://minio:9000
       BACKOFFICE_SOCIAL_MEDIA_ACCESS_KEY: ${MINIO_ROOT_USER:-videochat-minio}
@@ -244,6 +271,8 @@ services:
       BACKOFFICE_SOCIAL_MEDIA_BUCKET: ${BACKOFFICE_SOCIAL_MEDIA_BUCKET:-social-media}
       BACKOFFICE_SOCIAL_MEDIA_MAX_UPLOAD_BYTES: ${BACKOFFICE_SOCIAL_MEDIA_MAX_UPLOAD_BYTES:-26214400}
       BACKOFFICE_SOCIAL_MEDIA_MAX_FILES_PER_POST: ${BACKOFFICE_SOCIAL_MEDIA_MAX_FILES_PER_POST:-4}
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-mailpit}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-1025}
     volumes:
       - ./vault/scripts:/vault/scripts:ro
       - vault-runtime:/vault/runtime:ro
